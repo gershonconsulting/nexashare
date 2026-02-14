@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Check, Sparkles, Zap, Crown, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { PRICING_PLANS, formatPrice, calculateSavings } from '@/shared/pricing';
+import { PRICING_PLANS, formatPrice, calculateSavings } from '@shared/pricing';
 
 export function PricingPage() {
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('yearly');

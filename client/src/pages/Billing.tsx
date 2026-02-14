@@ -15,7 +15,7 @@ import {
   Zap
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { PRICING_PLANS, getPlan } from '@/shared/pricing';
+import { PRICING_PLANS, getPlan } from '@shared/pricing';
 
 export function BillingPage() {
   const [subscription, setSubscription] = useState<any>(null);

@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "NexaShare - LinkedIn Cookie Extractor",
+  "version": "1.0.0",
+  "description": "Connect your LinkedIn account to NexaShare for automated reposting",
+  "permissions": [
+    "cookies",
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://*.linkedin.com/*",
+    "https://nexashare.com/*",
+    "http://localhost:5000/*"
+  ],
+  "background": {
+    "service_worker": "js/background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.linkedin.com/*"],
+      "js": ["js/content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
