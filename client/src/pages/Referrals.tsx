@@ -119,7 +119,7 @@ function ReferralLink({ referralCode }: { referralCode: string }) {
       <CardHeader>
         <CardTitle>Your Referral Link</CardTitle>
         <CardDescription>
-          Share this link with friends to invite them to Hexashare
+          Share this link with friends to invite them to NexaShare
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -148,7 +148,7 @@ function ReferralLink({ referralCode }: { referralCode: string }) {
             size="sm"
             variant="outline"
             onClick={() => {
-              const text = `Join me on Hexashare, the best B2B influencer amplification platform. Use my referral link: ${referralLink}`;
+              const text = `Join me on NexaShare, the best B2B influencer amplification platform. Use my referral link: ${referralLink}`;
               window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
             }}
           >
@@ -158,8 +158,8 @@ function ReferralLink({ referralCode }: { referralCode: string }) {
             size="sm"
             variant="outline"
             onClick={() => {
-              const text = `Join me on Hexashare, the best B2B influencer amplification platform. Use my referral link: ${referralLink}`;
-              window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(referralLink)}&title=${encodeURIComponent('Join me on Hexashare')}`, '_blank');
+              const text = `Join me on NexaShare, the best B2B influencer amplification platform. Use my referral link: ${referralLink}`;
+              window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(referralLink)}&title=${encodeURIComponent('Join me on NexaShare')}`, '_blank');
             }}
           >
             Share on LinkedIn
@@ -214,7 +214,7 @@ export default function Referrals() {
     onSuccess: () => {
       toast({
         title: "Invitation sent",
-        description: "Your friend has been invited to Hexashare!",
+        description: "Your friend has been invited to NexaShare!",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/referrals'] });
       form.reset();
@@ -259,7 +259,7 @@ export default function Referrals() {
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-6">
             <div>
               <h1 className="text-2xl font-bold text-neutral-900">Refer a Friend</h1>
-              <p className="text-neutral-600">Invite friends to Hexashare and earn rewards</p>
+              <p className="text-neutral-600">Invite friends to NexaShare and earn rewards</p>
             </div>
             <div className="mt-4 lg:mt-0">
               <Button 
@@ -368,7 +368,7 @@ export default function Referrals() {
                           <Share2 className="h-12 w-12 text-neutral-300 mb-4" />
                           <h3 className="text-lg font-medium text-neutral-900 mb-1">No referrals yet</h3>
                           <p className="text-neutral-600 max-w-sm mb-4">
-                            Start inviting friends to Hexashare and track your referrals here.
+                            Start inviting friends to NexaShare and track your referrals here.
                           </p>
                           <Button 
                             onClick={() => setEmailInviteOpen(true)}
@@ -385,7 +385,7 @@ export default function Referrals() {
             </div>
             
             <div>
-              <ReferralLink referralCode={referralData.referralCode || 'HEXASHARE'} />
+              <ReferralLink referralCode={referralData.referralCode || 'NEXASHARE'} />
             </div>
           </div>
         </div>
@@ -397,7 +397,7 @@ export default function Referrals() {
           <DialogHeader>
             <DialogTitle>Invite a Friend</DialogTitle>
             <DialogDescription>
-              Send an email invitation to your friend to join Hexashare
+              Send an email invitation to your friend to join NexaShare
             </DialogDescription>
           </DialogHeader>
           

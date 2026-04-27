@@ -38,7 +38,7 @@ export function Sidebar() {
           <div className="h-8 w-8 bg-primary rounded flex items-center justify-center">
             <i className="fas fa-share-nodes text-white text-lg"></i>
           </div>
-          <h1 className="text-xl font-semibold text-neutral-900">Hexashare</h1>
+          <h1 className="text-xl font-semibold text-neutral-900">NexaShare</h1>
         </div>
       </div>
       

@@ -10,7 +10,7 @@ export function LoginForm() {
         <div className="inline-flex items-center justify-center h-12 w-12 bg-primary rounded-lg mb-4">
           <i className="fas fa-share-nodes text-white text-xl"></i>
         </div>
-        <h2 className="text-2xl font-bold text-neutral-900">Welcome to Hexashare</h2>
+        <h2 className="text-2xl font-bold text-neutral-900">Welcome to NexaShare</h2>
         <p className="text-neutral-600 mt-2">B2B Content Amplification Platform</p>
       </div>
       

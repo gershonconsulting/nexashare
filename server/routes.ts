@@ -749,7 +749,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create or get the premium price
       let priceId: string;
       const existingPrices = await getStripe().prices.list({
-        lookup_keys: ['hexashare_premium'],
+        lookup_keys: ['nexashare_premium'],
         limit: 1
       });
       
@@ -758,7 +758,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         // Create product and price
         const product = await getStripe().products.create({
-          name: "Hexashare Premium",
+          name: "NexaShare Premium",
           description: "Access to premium features and unlimited content amplification",
         });
         
@@ -767,7 +767,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           unit_amount: 1990,
           currency: "usd",
           recurring: { interval: "month" },
-          lookup_key: "hexashare_premium",
+          lookup_key: "nexashare_premium",
         });
         priceId = price.id;
       }

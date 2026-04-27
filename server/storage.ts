@@ -344,7 +344,7 @@ export class DatabaseStorage implements IStorage {
       await this.createUser({
         username: "admin",
         password: adminPassword,
-        email: "admin@hexashare.com",
+        email: "admin@nexashare.com",
         fullName: "Admin User",
         role: "admin"
       });
