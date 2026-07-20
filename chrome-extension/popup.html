@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>NexaShare</title>
+  <style>
+    body { width: 340px; font: 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; color: #1f2937; }
+    .header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+    h1 { font-size: 15px; margin: 0; font-weight: 600; color: #0A66C2; }
+    .ver { font-size: 10px; color: #9ca3af; font-weight: 400; }
+    .sub { font-size: 11px; color: #6b7280; margin-bottom: 14px; line-height: 1.4; }
+    .auto { font-size: 11px; color: #059669; margin: 2px 0 12px; }
+    .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px; margin-bottom: 8px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; background: #0A66C2; color: white; }
+    .btn:hover { background: #004182; }
+    .btn:disabled { opacity: 0.6; cursor: wait; }
+    .btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+    .btn-secondary:hover { background: #e5e7eb; }
+    .status { font-size: 11px; padding: 8px 10px; border-radius: 6px; margin: 4px 0; line-height: 1.4; }
+    .status.ok { background: #d1fae5; color: #065f46; }
+    .status.err { background: #fee2e2; color: #991b1b; }
+    .status.info { background: #f3f4f6; color: #374151; }
+    .companies { margin: 12px 0; }
+    .company-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: #f9fafb; border-radius: 6px; margin-bottom: 4px; font-size: 12px; }
+    .company-name { font-weight: 500; }
+    .company-status { font-size: 10px; padding: 2px 6px; border-radius: 10px; }
+    .company-status.on { background: #d1fae5; color: #065f46; }
+    .company-status.off { background: #fef3c7; color: #92400e; }
+    .section-title { font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .last { margin-top: 12px; padding-top: 10px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; }
+    .add-form { display: none; margin: 8px 0; }
+    .add-form input { width: 100%; padding: 8px; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 6px; box-sizing: border-box; margin-bottom: 6px; }
+    .add-form .btn { font-size: 12px; padding: 8px; }
+    a { color: #0A66C2; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>NexaShare</h1>
+    <span class="ver" id="ver"></span>
+  </div>
+  <div class="sub">Auto-repost company content to your LinkedIn feed daily. The extension scrapes posts from your followed company pages and reposts them using your real browser session.</div>
+  <div class="auto" id="auto-status">&#x23F0; Runs automatically once a day while Chrome is open</div>
+
+  <button id="sync-now" class="btn"><span>&#x1F504;</span> Sync now</button>
+
+  <div id="status"></div>
+
+  <div class="section-title">Companies</div>
+  <div id="companies" class="companies">
+    <div style="font-size: 11px; color: #9ca3af;">Loading...</div>
+  </div>
+
+  <button id="add-btn" class="btn btn-secondary" style="font-size: 12px; padding: 8px; margin-bottom: 0;">+ Add company</button>
+  <div id="add-form" class="add-form">
+    <input type="text" id="company-url" placeholder="linkedin.com/company/company-name" />
+    <button class="btn" style="font-size: 12px; padding: 8px;" id="save-company">Save</button>
+  </div>
+
+  <div class="last" id="last-sync"></div>
+
+  <div style="margin-top: 10px; text-align: center;">
+    <a href="https://nexashare.com" target="_blank" style="font-size: 11px;">Open NexaShare dashboard &#x2197;</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
