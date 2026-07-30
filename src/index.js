@@ -1,6 +1,7 @@
 const LINKEDIN_CLIENT_ID = '78dsjq2rbcv26t';
 const LINKEDIN_REDIRECT_URI = 'https://nexashare.oattia.workers.dev/api/auth/callback';
-const LINKEDIN_SCOPES = 'openid profile email w_member_social';
+const LINKEDIN_SCOPES = 'openid profile email';
+const BASE_URL = 'https://nexashare.oattia.workers.dev';
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -37,7 +38,8 @@ async function handleAuth(request, env) {
     const error = url.searchParams.get('error');
 
     if (error || !code) {
-      return Response.redirect('/login.html?error=auth_failed', 302);
+      const errMsg = error || 'auth_failed';
+      return Response.redirect(`${BASE_URL}/login.html?error=${encodeURIComponent(errMsg)}`, 302);
     }
 
     try {
@@ -56,7 +58,7 @@ async function handleAuth(request, env) {
       const tokenData = await tokenRes.json();
 
       if (!tokenData.access_token) {
-        return Response.redirect('/login.html?error=token_failed', 302);
+        return Response.redirect(`${BASE_URL}/login.html?error=token_failed`, 302);
       }
 
       // Get user profile from LinkedIn
@@ -101,16 +103,15 @@ async function handleAuth(request, env) {
       // Create session token (simple approach for POC)
       const sessionToken = btoa(`${userId}:${Date.now()}:${crypto.randomUUID()}`);
 
-      const response = Response.redirect('/dashboard.html', 302);
-      return new Response(response.body, {
+      return new Response(null, {
         status: 302,
         headers: {
-          'Location': '/dashboard.html',
+          'Location': `${BASE_URL}/dashboard.html`,
           'Set-Cookie': setCookie('session', sessionToken)
         }
       });
     } catch (err) {
-      return Response.redirect(`/login.html?error=${encodeURIComponent(err.message)}`, 302);
+      return Response.redirect(`${BASE_URL}/login.html?error=${encodeURIComponent(err.message)}`, 302);
     }
   }
 
@@ -192,7 +193,7 @@ async function handleAPI(request, env) {
     return new Response(null, {
       status: 302,
       headers: {
-        'Location': '/',
+        'Location': `${BASE_URL}/`,
         'Set-Cookie': setCookie('session', '', 0)
       }
     });
