@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard â NexaShare</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f7fa;min-height:100vh}
+.nav{background:#fff;border-bottom:1px solid #e5e7eb;padding:12px 32px;display:flex;align-items:center;justify-content:space-between}
+.nav-left{display:flex;align-items:center;gap:10px}
+.nav-logo{width:32px;height:32px;background:#0A66C2;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px}
+.nav-left span{font-size:18px;font-weight:700;color:#111}
+.nav-right{display:flex;align-items:center;gap:16px}
+.nav-user{font-size:14px;color:#555}
+.btn-sm{padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;text-decoration:none}
+.btn-outline{background:#fff;border:1px solid #d1d5db;color:#333}.btn-outline:hover{background:#f9fafb}
+.btn-primary{background:#0A66C2;color:#fff}.btn-primary:hover{background:#004182}
+.btn-danger{background:#fff;border:1px solid #d1d5db;color:#991b1b}.btn-danger:hover{background:#fef2f2}
+.main{max-width:1100px;margin:0 auto;padding:32px 24px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px}
+.stat-card{background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.stat-card .label{font-size:13px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.stat-card .value{font-size:32px;font-weight:700;color:#111}
+.section{margin-bottom:32px}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.section-header h2{font-size:18px;color:#111}
+.table-wrap{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.05);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:12px 16px;font-size:13px;font-weight:600;color:#666;background:#f9fafb;border-bottom:1px solid #e5e7eb}
+td{padding:12px 16px;font-size:14px;color:#333;border-bottom:1px solid #f3f4f6}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+.badge-green{background:#ecfdf5;color:#065f46}
+.badge-yellow{background:#fffbeb;color:#92400e}
+.badge-blue{background:#eff6ff;color:#1d4ed8}
+.empty{text-align:center;padding:48px;color:#999;font-size:15px}
+.loading{text-align:center;padding:48px;color:#999}
+.invite-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:20px;margin-bottom:32px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.invite-box p{font-size:14px;color:#1e40af}
+.invite-url{background:#fff;border:1px solid #93c5fd;border-radius:6px;padding:8px 12px;font-size:13px;color:#1e40af;flex:1;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ext-banner{background:linear-gradient(135deg,#0A66C2,#004182);border-radius:10px;padding:24px 32px;color:#fff;display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}
+.ext-banner h3{font-size:16px;margin-bottom:4px}
+.ext-banner p{font-size:13px;opacity:.85}
+.ext-banner .btn-sm{background:#fff;color:#0A66C2}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-left"><div class="nav-logo">N</div><span>NexaShare</span></div>
+  <div class="nav-right">
+    <span class="nav-user" id="userName">Loading...</span>
+    <a href="/api/auth/logout" class="btn-sm btn-danger">Sign Out</a>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="ext-banner">
+    <div>
+      <h3>Install the Chrome Extension</h3>
+      <p>Auto-detect and repost company content from your LinkedIn feed</p>
+    </div>
+    <a href="/nexashare-extension.zip" class="btn-sm" download>Download Extension</a>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card"><div class="label">Total Reposts</div><div class="value" id="totalReposts">â</div></div>
+    <div class="stat-card"><div class="label">This Week</div><div class="value" id="weekReposts">â</div></div>
+    <div class="stat-card"><div class="label">Team Members</div><div class="value" id="totalMembers">â</div></div>
+  </div>
+
+  <div id="inviteSection" style="display:none">
+    <div class="invite-box">
+      <p><strong>Invite team members</strong> â share this link with your team:</p>
+      <input class="invite-url" id="inviteUrl" readonly>
+      <button class="btn-sm btn-primary" onclick="copyInvite()">Copy</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <h2>Recent Reposts</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Member</th><th>Post URL</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody id="repostsBody"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <h2>Team Members</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr></thead>
+        <tbody id="membersBody"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+async function api(path) {
+  const res = await fetch(path);
+  if (res.status === 401) { window.location.href = '/login.html'; return null; }
+  return res.json();
+}
+
+function formatDate(d) {
+  if (!d) return 'â';
+  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function badgeClass(status) {
+  if (status === 'completed' || status === 'reposted') return 'badge-green';
+  if (status === 'pending') return 'badge-yellow';
+  return 'badge-blue';
+}
+
+async function load() {
+  const [user, stats, reposts, team] = await Promise.all([
+    api('/api/user'), api('/api/stats'), api('/api/reposts'), api('/api/team')
+  ]);
+
+  if (!user) return;
+
+  document.getElementById('userName').textContent = user.name + (user.team_name ? ` Â· ${user.team_name}` : '');
+  document.getElementById('totalReposts').textContent = stats?.total_reposts ?? 0;
+  document.getElementById('weekReposts').textContent = stats?.reposts_this_week ?? 0;
+  document.getElementById('totalMembers').textContent = stats?.total_members ?? 0;
+
+  // Invite link for admins
+  if (user.role === 'admin') {
+    const invite = await api('/api/team/invite');
+    if (invite?.inviteUrl) {
+      document.getElementById('inviteUrl').value = invite.inviteUrl;
+      document.getElementById('inviteSection').style.display = 'block';
+    }
+  }
+
+  // Reposts table
+  const rb = document.getElementById('repostsBody');
+  if (!reposts?.reposts?.length) {
+    rb.innerHTML = '<tr><td colspan="4" class="empty">No reposts yet. Install the extension to get started!</td></tr>';
+  } else {
+    rb.innerHTML = reposts.reposts.map(r => `<tr>
+      <td>${r.user_name || 'â'}</td>
+      <td><a href="${r.original_post_url}" target="_blank" style="color:#0A66C2">${r.original_post_url?.substring(0,50)}...</a></td>
+      <td><span class="badge ${badgeClass(r.status)}">${r.status}</span></td>
+      <td>${formatDate(r.created_at)}</td>
+    </tr>`).join('');
+  }
+
+  // Members table
+  const mb = document.getElementById('membersBody');
+  if (!team?.members?.length) {
+    mb.innerHTML = '<tr><td colspan="4" class="empty">No team members yet</td></tr>';
+  } else {
+    mb.innerHTML = team.members.map(m => `<tr>
+      <td>${m.name}</td>
+      <td>${m.email}</td>
+      <td><span class="badge badge-blue">${m.role}</span></td>
+      <td>${formatDate(m.created_at)}</td>
+    </tr>`).join('');
+  }
+}
+
+function copyInvite() {
+  const el = document.getElementById('inviteUrl');
+  el.select();
+  document.execCommand('copy');
+  const btn = el.nextElementSibling;
+  btn.textContent = 'Copied!';
+  setTimeout(() => btn.textContent = 'Copy', 2000);
+}
+
+load();
+</script>
+</body>
+</html>
