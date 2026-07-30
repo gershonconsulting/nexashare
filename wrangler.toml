@@ -1,5 +1,12 @@
 name = "nexashare"
+main = "src/index.js"
 compatibility_date = "2024-12-01"
 
 [assets]
 directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nexashare-db"
+database_id = "a282afe3-af5f-44e3-9982-c49dd5bd641d"
