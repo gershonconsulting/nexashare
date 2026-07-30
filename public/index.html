@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexaShare — LinkedIn Content Amplification</title>
+  <meta name="description" content="Amplify your company LinkedIn presence. Auto-repost company content across your team profiles.">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--blue:#0A66C2;--dark:#191919;--gray:#666;--light:#f3f6f8;--white:#fff}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--dark);line-height:1.6}
+    .container{max-width:1100px;margin:0 auto;padding:0 24px}
+    nav{background:var(--white);border-bottom:1px solid #e0e0e0;padding:16px 0;position:sticky;top:0;z-index:10}
+    nav .container{display:flex;justify-content:space-between;align-items:center}
+    .logo{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:700;color:var(--dark);text-decoration:none}
+    .logo-icon{width:36px;height:36px;background:var(--blue);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px}
+    .btn{display:inline-block;padding:10px 24px;border-radius:24px;font-weight:600;font-size:15px;text-decoration:none;cursor:pointer;border:none;transition:all .2s}
+    .btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:#004182}
+    .btn-outline{border:2px solid var(--blue);color:var(--blue);background:transparent}.btn-outline:hover{background:var(--blue);color:#fff}
+    .hero{padding:80px 0 60px;text-align:center;background:linear-gradient(180deg,var(--white) 0%,var(--light) 100%)}
+    .hero h1{font-size:48px;line-height:1.15;margin-bottom:20px;font-weight:800}
+    .hero h1 span{color:var(--blue)}
+    .hero p{font-size:20px;color:var(--gray);max-width:620px;margin:0 auto 36px}
+    .hero-cta{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+    .features{padding:80px 0;background:var(--white)}.features h2{text-align:center;font-size:32px;margin-bottom:48px}
+    .feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:32px}
+    .feature-card{background:var(--light);border-radius:16px;padding:32px}.feature-card h3{font-size:20px;margin-bottom:8px}.feature-card p{color:var(--gray)}
+    .how{padding:80px 0;background:var(--light)}.how h2{text-align:center;font-size:32px;margin-bottom:48px}
+    .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:32px;text-align:center}
+    .step-num{width:48px;height:48px;border-radius:50%;background:var(--blue);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;margin-bottom:16px}
+    .cta-section{padding:80px 0;text-align:center;background:var(--dark);color:#fff}.cta-section h2{font-size:36px;margin-bottom:16px}.cta-section p{color:#aaa;font-size:18px;margin-bottom:32px}
+    footer{padding:32px 0;background:var(--dark);border-top:1px solid #333;color:#888;font-size:13px;text-align:center}
+    .ext-section{padding:60px 0;background:var(--white);text-align:center}.ext-section h2{font-size:28px;margin-bottom:12px}.ext-section p{color:var(--gray);margin-bottom:24px}
+    @media(max-width:768px){.hero h1{font-size:32px}}
+  </style>
+</head>
+<body>
+  <nav><div class="container"><a href="/" class="logo"><div class="logo-icon">N</div>NexaShare</a><div style="display:flex;gap:24px;align-items:center"><a href="#features" style="color:var(--gray);text-decoration:none">Features</a><a href="#how" style="color:var(--gray);text-decoration:none">How It Works</a><a href="/login" class="btn btn-primary">Get Started</a></div></div></nav>
+  <section class="hero"><div class="container"><h1>Amplify your team's <span>LinkedIn</span> presence</h1><p>Automatically repost company content across employee profiles. One dashboard, zero manual effort, maximum reach.</p><div class="hero-cta"><a href="/register" class="btn btn-primary">Start Free Trial</a><a href="#how" class="btn btn-outline">See How It Works</a></div></div></section>
+  <section class="features" id="features"><div class="container"><h2>Why teams choose NexaShare</h2><div class="feature-grid"><div class="feature-card"><h3>Auto-Detection</h3><p>Our Chrome extension monitors your company LinkedIn page and detects new posts in real time.</p></div><div class="feature-card"><h3>One-Click Repost</h3><p>Employees approve reposts from the extension popup. Content appears on their feed within seconds.</p></div><div class="feature-card"><h3>Team Dashboard</h3><p>Track engagement, see who is amplifying, and measure the reach of every campaign from one view.</p></div></div></div></section>
+  <section class="how" id="how"><div class="container"><h2>How It Works</h2><div class="steps"><div class="step"><div class="step-num">1</div><h3>Install Extension</h3><p>Add the NexaShare Chrome extension.</p></div><div class="step"><div class="step-num">2</div><h3>Add Companies</h3><p>Enter LinkedIn company pages to monitor.</p></div><div class="step"><div class="step-num">3</div><h3>Auto-Sync</h3><p>Extension checks for new posts daily.</p></div><div class="step"><div class="step-num">4</div><h3>Amplify</h3><p>Content is reposted to employee profiles.</p></div></div></div></section>
+  <section class="ext-section" id="extension"><div class="container"><h2>Get the Chrome Extension</h2><p>Download and install the NexaShare extension to start amplifying.</p><a href="/nexashare-extension.zip" class="btn btn-primary" download>Download Extension (.zip)</a></div></section>
+  <section class="cta-section"><div class="container"><h2>Ready to amplify?</h2><p>Join companies already using NexaShare to turn their teams into LinkedIn powerhouses.</p><a href="/register" class="btn btn-primary">Get Started Free</a></div></section>
+  <footer><div class="container">© 2026 NexaShare. All rights reserved.</div></footer>
+</body>
+</html>
