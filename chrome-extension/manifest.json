@@ -1,14 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "NexaShare — LinkedIn Content Amplifier",
-  "version": "1.0.0",
-  "description": "Auto-repost company content to your LinkedIn feed daily. Collect posts and stats.",
+  "name": "NexaShare - LinkedIn Content Amplifier",
+  "version": "1.2.0",
+  "description": "Repost configured company content through LinkedIn's visible browser interface and report confirmed outcomes.",
   "permissions": [
     "alarms",
     "storage",
     "scripting",
-    "tabs",
-    "cookies"
+    "tabs"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
@@ -32,10 +31,5 @@
   "action": {
     "default_title": "NexaShare",
     "default_popup": "popup.html"
-  },
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
   }
 }

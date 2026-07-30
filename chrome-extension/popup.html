@@ -9,7 +9,7 @@
     h1 { font-size: 15px; margin: 0; font-weight: 600; color: #0A66C2; }
     .ver { font-size: 10px; color: #9ca3af; font-weight: 400; }
     .sub { font-size: 11px; color: #6b7280; margin-bottom: 14px; line-height: 1.4; }
-    .auto { font-size: 11px; color: #059669; margin: 2px 0 12px; }
+    .auto { font-size: 11px; color: #374151; margin: 2px 0 12px; }
     .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px; margin-bottom: 8px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; background: #0A66C2; color: white; }
     .btn:hover { background: #004182; }
     .btn:disabled { opacity: 0.6; cursor: wait; }
@@ -39,8 +39,8 @@
     <h1>NexaShare</h1>
     <span class="ver" id="ver"></span>
   </div>
-  <div class="sub">Auto-repost company content to your LinkedIn feed daily. The extension scrapes posts from your followed company pages and reposts them using your real browser session.</div>
-  <div class="auto" id="auto-status">&#x23F0; Runs automatically once a day while Chrome is open</div>
+  <div class="sub">Automatic reposting checks once daily and uses LinkedIn's visible repost controls. Only visibly confirmed reposts are reported as successful.</div>
+  <div class="auto" id="auto-status">Automatic reposting is enabled. Keep Chrome running with a signed-in LinkedIn tab open. You can also run it now.</div>
 
   <button id="sync-now" class="btn"><span>&#x1F504;</span> Sync now</button>
 
@@ -51,16 +51,11 @@
     <div style="font-size: 11px; color: #9ca3af;">Loading...</div>
   </div>
 
-  <button id="add-btn" class="btn btn-secondary" style="font-size: 12px; padding: 8px; margin-bottom: 0;">+ Add company</button>
-  <div id="add-form" class="add-form">
-    <input type="text" id="company-url" placeholder="linkedin.com/company/company-name" />
-    <button class="btn" style="font-size: 12px; padding: 8px;" id="save-company">Save</button>
-  </div>
-
+  <button id="add-btn" class="btn btn-secondary" style="font-size: 12px; padding: 8px; margin-bottom: 0;">Manage companies in dashboard</button>
   <div class="last" id="last-sync"></div>
 
   <div style="margin-top: 10px; text-align: center;">
-    <a href="https://nexashare.com" target="_blank" style="font-size: 11px;">Open NexaShare dashboard &#x2197;</a>
+    <a href="https://nexashare.com/dashboard.html" target="_blank" style="font-size: 11px;">Open NexaShare dashboard &#x2197;</a>
   </div>
 
   <script src="popup.js"></script>

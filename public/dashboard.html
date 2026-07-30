@@ -1,183 +1,82 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard â NexaShare</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Member Area - NexaShare</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f7fa;min-height:100vh}
-.nav{background:#fff;border-bottom:1px solid #e5e7eb;padding:12px 32px;display:flex;align-items:center;justify-content:space-between}
-.nav-left{display:flex;align-items:center;gap:10px}
-.nav-logo{width:32px;height:32px;background:#0A66C2;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px}
-.nav-left span{font-size:18px;font-weight:700;color:#111}
-.nav-right{display:flex;align-items:center;gap:16px}
-.nav-user{font-size:14px;color:#555}
-.btn-sm{padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;text-decoration:none}
-.btn-outline{background:#fff;border:1px solid #d1d5db;color:#333}.btn-outline:hover{background:#f9fafb}
-.btn-primary{background:#0A66C2;color:#fff}.btn-primary:hover{background:#004182}
-.btn-danger{background:#fff;border:1px solid #d1d5db;color:#991b1b}.btn-danger:hover{background:#fef2f2}
-.main{max-width:1100px;margin:0 auto;padding:32px 24px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px}
-.stat-card{background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-.stat-card .label{font-size:13px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
-.stat-card .value{font-size:32px;font-weight:700;color:#111}
-.section{margin-bottom:32px}
-.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
-.section-header h2{font-size:18px;color:#111}
-.table-wrap{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.05);overflow:hidden}
-table{width:100%;border-collapse:collapse}
-th{text-align:left;padding:12px 16px;font-size:13px;font-weight:600;color:#666;background:#f9fafb;border-bottom:1px solid #e5e7eb}
-td{padding:12px 16px;font-size:14px;color:#333;border-bottom:1px solid #f3f4f6}
-tr:last-child td{border-bottom:none}
-.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
-.badge-green{background:#ecfdf5;color:#065f46}
-.badge-yellow{background:#fffbeb;color:#92400e}
-.badge-blue{background:#eff6ff;color:#1d4ed8}
-.empty{text-align:center;padding:48px;color:#999;font-size:15px}
-.loading{text-align:center;padding:48px;color:#999}
-.invite-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:20px;margin-bottom:32px;display:flex;align-items:center;justify-content:space-between;gap:16px}
-.invite-box p{font-size:14px;color:#1e40af}
-.invite-url{background:#fff;border:1px solid #93c5fd;border-radius:6px;padding:8px 12px;font-size:13px;color:#1e40af;flex:1;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ext-banner{background:linear-gradient(135deg,#0A66C2,#004182);border-radius:10px;padding:24px 32px;color:#fff;display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}
-.ext-banner h3{font-size:16px;margin-bottom:4px}
-.ext-banner p{font-size:13px;opacity:.85}
-.ext-banner .btn-sm{background:#fff;color:#0A66C2}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f6f8;color:#172033}.app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}.sidebar{background:#101828;color:#fff;padding:22px 14px;display:flex;flex-direction:column;gap:6px}.brand{font-size:20px;font-weight:750;padding:4px 10px 20px}.nav-item{display:block;width:100%;padding:11px 12px;border:0;border-radius:7px;background:transparent;color:#d0d5dd;text-align:left;font:inherit;text-decoration:none;cursor:pointer}.nav-item:hover,.nav-item.active{background:#344054;color:#fff}.sidebar-spacer{flex:1}.version{padding:10px 12px;color:#98a2b3;font-size:12px}.content{padding:28px;max-width:1180px;width:100%;margin:auto}.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}.topbar h1{font-size:25px;margin:0}.user{font-size:13px;color:#667085}.view{display:none}.view.active{display:block}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.panel,.stat{background:#fff;border-radius:10px;box-shadow:0 1px 3px #0000000d}.panel{padding:20px;margin-bottom:18px}.stat{padding:18px}.label{font-size:12px;text-transform:uppercase;color:#667085}.value{font-size:29px;font-weight:750;margin-top:5px}.muted{font-size:12px;color:#667085}.toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.button{display:inline-block;border:0;border-radius:7px;padding:9px 13px;background:#0a66c2;color:#fff;font-weight:650;text-decoration:none;cursor:pointer}.secondary{background:#fff;color:#0a66c2;border:1px solid #98bde2}.danger{color:#991b1b;border-color:#fecaca}.button:disabled{opacity:.6}.chart{min-height:230px}.bars{display:flex;align-items:flex-end;gap:6px;height:180px;border-bottom:1px solid #d0d5dd;padding:8px}.bar-wrap{flex:1;height:100%;display:flex;align-items:flex-end;justify-content:center;position:relative}.bar{width:min(32px,75%);background:#0a66c2;border-radius:4px 4px 0 0;min-height:2px}.bar-wrap span{position:absolute;bottom:-25px;font-size:10px;color:#667085}.donut-wrap{display:flex;gap:22px;align-items:center;justify-content:center;height:200px}.donut{width:145px;height:145px;border-radius:50%;position:relative}.donut:after{content:"";position:absolute;inset:30px;background:#fff;border-radius:50%}.legend p{margin:6px 0;font-size:12px}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #eef0f3;font-size:13px}th{color:#667085;background:#fafbfc}.badge{display:inline-block;padding:3px 9px;border-radius:20px;font-weight:650}.confirmed{background:#dcfce7;color:#166534}.failed{background:#fee2e2;color:#991b1b}.already_reposted{background:#e0e7ff;color:#3730a3}.skipped{background:#f3f4f6;color:#4b5563}.empty{text-align:center;padding:32px;color:#7d8795}.form-row{display:flex;gap:8px}.form-row input,.toolbar select{padding:10px;border:1px solid #ccd3dc;border-radius:7px;background:#fff}.form-row input{flex:1}.message{font-size:13px;min-height:20px;margin-top:8px}.notice{padding:15px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;margin-bottom:12px}.warning{background:#fff7ed;border-color:#fed7aa}.checklist{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.check{padding:10px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px}.check.done{background:#ecfdf5;border-color:#a7f3d0;color:#065f46}.company-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #eef0f3}.health-ready{color:#166534}.health-bad{color:#991b1b}@media(max-width:800px){.app{grid-template-columns:1fr}.sidebar{position:static;flex-direction:row;flex-wrap:wrap}.brand{width:100%;padding-bottom:8px}.sidebar-spacer{display:none}.nav-item{width:auto}.content{padding:18px}.grid{grid-template-columns:1fr}.checklist{grid-template-columns:1fr 1fr}}
 </style>
 </head>
-<body>
-<nav class="nav">
-  <div class="nav-left"><div class="nav-logo">N</div><span>NexaShare</span></div>
-  <div class="nav-right">
-    <span class="nav-user" id="userName">Loading...</span>
-    <a href="/api/auth/logout" class="btn-sm btn-danger">Sign Out</a>
-  </div>
-</nav>
+<body><div class="app">
+<aside class="sidebar">
+  <div class="brand">NexaShare</div>
+  <button class="nav-item active" data-view="dashboard">Dashboard</button>
+  <button class="nav-item" data-view="analysis">Analysis</button>
+  <button class="nav-item" data-view="log">Log</button>
+  <button class="nav-item" data-view="settings">Settings</button>
+  <button class="nav-item" data-view="referral">Referral</button>
+  <div class="sidebar-spacer"></div>
+  <div class="version">Version 1.2.0</div>
+  <a class="nav-item" href="/api/auth/logout">Logout</a>
+</aside>
+<main class="content">
+  <div class="topbar"><h1 id="pageTitle">Dashboard</h1><span class="user" id="userName">Loading...</span></div>
 
-<div class="main">
-  <div class="ext-banner">
-    <div>
-      <h3>Install the Chrome Extension</h3>
-      <p>Auto-detect and repost company content from your LinkedIn feed</p>
+  <section class="view active" id="view-dashboard">
+    <div class="toolbar"><p class="muted">Concise outcome trends</p><select id="range"><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="all">All time</option></select></div>
+    <div class="grid" id="summaryCards"><div class="stat"><div class="label">Loading</div><div class="value">-</div></div></div>
+    <div class="grid" style="margin-top:14px">
+      <div class="panel chart" style="grid-column:span 2"><div class="toolbar"><strong>Outcomes over time</strong><span class="muted" id="timelineSummary"></span></div><div class="bars" id="timelineChart"></div></div>
+      <div class="panel chart"><strong>Outcome mix</strong><div class="donut-wrap" id="mixChart"></div></div>
     </div>
-    <a href="/nexashare-extension.zip" class="btn-sm" download>Download Extension</a>
-  </div>
+  </section>
 
-  <div class="stats">
-    <div class="stat-card"><div class="label">Total Reposts</div><div class="value" id="totalReposts">â</div></div>
-    <div class="stat-card"><div class="label">This Week</div><div class="value" id="weekReposts">â</div></div>
-    <div class="stat-card"><div class="label">Team Members</div><div class="value" id="totalMembers">â</div></div>
-  </div>
+  <section class="view" id="view-analysis">
+    <div class="grid" id="analysisCards"></div>
+    <div class="panel" style="margin-top:14px"><h2>Company summary</h2><div class="table-wrap"><table><thead><tr><th>Company</th><th>Confirmed</th><th>Failed</th><th>Skipped/known</th></tr></thead><tbody id="companyAnalysis"></tbody></table></div></div>
+    <div class="panel"><h2>Member summary</h2><div class="table-wrap"><table><thead><tr><th>Member</th><th>Total outcomes</th><th>Confirmed</th></tr></thead><tbody id="memberAnalysis"></tbody></table></div></div>
+  </section>
 
-  <div id="inviteSection" style="display:none">
-    <div class="invite-box">
-      <p><strong>Invite team members</strong> â share this link with your team:</p>
-      <input class="invite-url" id="inviteUrl" readonly>
-      <button class="btn-sm btn-primary" onclick="copyInvite()">Copy</button>
+  <section class="view" id="view-log">
+    <div class="panel"><div class="toolbar"><div><h2>Activity log</h2><p class="muted">Success appears only after LinkedIn visibly confirms it.</p></div><select id="outcomeFilter"><option value="all">All outcomes</option><option value="confirmed">Confirmed</option><option value="failed">Failed</option><option value="already_reposted">Already reposted</option><option value="skipped">Skipped</option></select></div>
+      <div class="table-wrap"><table><thead><tr><th>Member</th><th>Company/post</th><th>Outcome</th><th>Details</th><th>Time</th></tr></thead><tbody id="logBody"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody></table></div>
     </div>
-  </div>
+  </section>
 
-  <div class="section">
-    <div class="section-header">
-      <h2>Recent Reposts</h2>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Member</th><th>Post URL</th><th>Status</th><th>Date</th></tr></thead>
-        <tbody id="repostsBody"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
-      </table>
-    </div>
-  </div>
+  <section class="view" id="view-settings">
+    <div class="panel"><div class="toolbar"><div><h2>Subscription</h2><p class="muted" id="subscriptionText">Loading trial information...</p></div><a class="button" id="upgradeLink" href="https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00" target="_blank" rel="noopener noreferrer">Upgrade with Stripe</a></div><div class="notice warning" id="subscriptionNotice">Checkout and activation are not yet verified automatically. Live enforcement requires Stripe webhook configuration.</div></div>
+    <div class="panel"><h2>Automatic reposting</h2><p class="muted">Checks once daily while Chrome is running and a signed-in LinkedIn tab is open. At most one unseen post per enabled company is attempted.</p><form class="form-row" id="companyForm"><input id="companyUrl" required placeholder="https://www.linkedin.com/company/company-name"><button class="button">Add company</button></form><div class="message" id="companyMessage"></div><div id="companyList"></div></div>
+    <div class="panel"><div class="toolbar"><div><h2>Private extension</h2><p class="muted" id="extensionStatus">Checking browser bridge...</p></div><div><a class="button secondary" href="/nexashare-extension.zip" download>Download newest ZIP</a> <button class="button" id="connectExtension">Connect browser</button></div></div><div id="updatePrompt" class="notice warning" style="display:none"></div><div class="checklist"><div class="check" id="stepCompany">Company</div><div class="check" id="stepExtension">Installed</div><div class="check" id="stepConnect">Connected</div><div class="check" id="stepLinkedIn">LinkedIn</div><div class="check" id="stepRun">First run</div></div><div class="notice" id="troubleshootingSteps" style="margin-top:12px">Checking...</div><p><a href="/LOCAL_EXTENSION_TESTING.md" target="_blank">Local installation and safe update guide</a></p></div>
+    <div class="panel"><h2>Service readiness</h2><p id="serviceHealth" class="muted">Checking Worker and database...</p></div>
+  </section>
 
-  <div class="section">
-    <div class="section-header">
-      <h2>Team Members</h2>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr></thead>
-        <tbody id="membersBody"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
+  <section class="view" id="view-referral">
+    <div class="panel"><h2>Referral</h2><div class="empty"><strong>Referral tracking is not configured yet.</strong><p>No referral code, reward, or attribution will be claimed until the product rules and storage are approved.</p></div></div>
+  </section>
+</main></div>
 <script>
-async function api(path) {
-  const res = await fetch(path);
-  if (res.status === 401) { window.location.href = '/login.html'; return null; }
-  return res.json();
-}
-
-function formatDate(d) {
-  if (!d) return 'â';
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function badgeClass(status) {
-  if (status === 'completed' || status === 'reposted') return 'badge-green';
-  if (status === 'pending') return 'badge-yellow';
-  return 'badge-blue';
-}
-
-async function load() {
-  const [user, stats, reposts, team] = await Promise.all([
-    api('/api/user'), api('/api/stats'), api('/api/reposts'), api('/api/team')
-  ]);
-
-  if (!user) return;
-
-  document.getElementById('userName').textContent = user.name + (user.team_name ? ` Â· ${user.team_name}` : '');
-  document.getElementById('totalReposts').textContent = stats?.total_reposts ?? 0;
-  document.getElementById('weekReposts').textContent = stats?.reposts_this_week ?? 0;
-  document.getElementById('totalMembers').textContent = stats?.total_members ?? 0;
-
-  // Invite link for admins
-  if (user.role === 'admin') {
-    const invite = await api('/api/team/invite');
-    if (invite?.inviteUrl) {
-      document.getElementById('inviteUrl').value = invite.inviteUrl;
-      document.getElementById('inviteSection').style.display = 'block';
-    }
-  }
-
-  // Reposts table
-  const rb = document.getElementById('repostsBody');
-  if (!reposts?.reposts?.length) {
-    rb.innerHTML = '<tr><td colspan="4" class="empty">No reposts yet. Install the extension to get started!</td></tr>';
-  } else {
-    rb.innerHTML = reposts.reposts.map(r => `<tr>
-      <td>${r.user_name || 'â'}</td>
-      <td><a href="${r.original_post_url}" target="_blank" style="color:#0A66C2">${r.original_post_url?.substring(0,50)}...</a></td>
-      <td><span class="badge ${badgeClass(r.status)}">${r.status}</span></td>
-      <td>${formatDate(r.created_at)}</td>
-    </tr>`).join('');
-  }
-
-  // Members table
-  const mb = document.getElementById('membersBody');
-  if (!team?.members?.length) {
-    mb.innerHTML = '<tr><td colspan="4" class="empty">No team members yet</td></tr>';
-  } else {
-    mb.innerHTML = team.members.map(m => `<tr>
-      <td>${m.name}</td>
-      <td>${m.email}</td>
-      <td><span class="badge badge-blue">${m.role}</span></td>
-      <td>${formatDate(m.created_at)}</td>
-    </tr>`).join('');
-  }
-}
-
-function copyInvite() {
-  const el = document.getElementById('inviteUrl');
-  el.select();
-  document.execCommand('copy');
-  const btn = el.nextElementSibling;
-  btn.textContent = 'Copied!';
-  setTimeout(() => btn.textContent = 'Copy', 2000);
-}
-
+const EXPECTED_EXTENSION_VERSION='1.2.0';
+const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let model={user:null,stats:null,reposts:[],team:[],companies:[],subscription:null};
+let ext={installed:false,version:null,connected:false,linkedIn:false,lastSync:null};
+async function api(path,options){const r=await fetch(path,options);if(r.status===401){location.href='/login.html';throw Error('Not authenticated')}const d=await r.json();if(!r.ok)throw Error(d.error||`Request failed (${r.status})`);return d}
+function fmt(d){return d?new Date(d).toLocaleString():'-'}
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${b.dataset.view}`));document.getElementById('pageTitle').textContent=b.textContent}));
+function rangeRows(){const v=document.getElementById('range').value;if(v==='all')return model.reposts;const cutoff=Date.now()-Number(v)*86400000;return model.reposts.filter(r=>new Date(r.attempted_at||r.created_at).getTime()>=cutoff)}
+function renderDashboard(){const rows=rangeRows(),confirmed=rows.filter(r=>r.status==='confirmed').length,failed=rows.filter(r=>r.status==='failed').length,rate=confirmed+failed?Math.round(confirmed/(confirmed+failed)*100):0;document.getElementById('summaryCards').innerHTML=[['Confirmed',confirmed],['Failed',failed],['Confirmation rate',rate+'%']].map(x=>`<div class="stat"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');const buckets={};rows.forEach(r=>{const k=new Date(r.attempted_at||r.created_at).toLocaleDateString(undefined,{month:'short',day:'numeric'});buckets[k]=(buckets[k]||0)+1});const entries=Object.entries(buckets).slice(-14),max=Math.max(1,...entries.map(x=>x[1]));document.getElementById('timelineChart').innerHTML=entries.length?entries.map(([k,v])=>`<div class="bar-wrap" title="${v} outcomes on ${escapeHtml(k)}"><div class="bar" style="height:${Math.max(4,v/max*100)}%"></div><span>${escapeHtml(k)}</span></div>`).join(''):'<div class="empty">No outcomes in this range.</div>';document.getElementById('timelineSummary').textContent=`${rows.length} total`;const statuses=['confirmed','failed','already_reposted','skipped'],counts=statuses.map(s=>rows.filter(r=>r.status===s).length),total=Math.max(1,rows.length),colors=['#16a34a','#dc2626','#4f46e5','#9ca3af'];let pos=0;const stops=counts.map((n,i)=>{const start=pos;pos+=n/total*360;return `${colors[i]} ${start}deg ${pos}deg`});document.getElementById('mixChart').innerHTML=rows.length?`<div class="donut" role="img" aria-label="${rows.length} outcomes by status" style="background:conic-gradient(${stops.join(',')})"></div><div class="legend">${statuses.map((s,i)=>`<p><span class="dot" style="background:${colors[i]}"></span>${s.replace('_',' ')}: ${counts[i]}</p>`).join('')}</div>`:'<div class="empty">No outcomes yet.</div>'}
+document.getElementById('range').addEventListener('change',renderDashboard);
+function group(rows,key){return rows.reduce((a,r)=>{const k=r[key]||'Unknown';(a[k]??=[]).push(r);return a},{})}
+function renderAnalysis(){const byCompany=group(model.reposts,'company_name'),byMember=group(model.reposts,'user_name');document.getElementById('analysisCards').innerHTML=[['Companies monitored',model.companies.length],['Team members',model.team.length],['Total recorded outcomes',model.reposts.length]].map(x=>`<div class="stat"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');document.getElementById('companyAnalysis').innerHTML=Object.keys(byCompany).length?Object.entries(byCompany).map(([k,v])=>`<tr><td>${escapeHtml(k)}</td><td>${v.filter(x=>x.status==='confirmed').length}</td><td>${v.filter(x=>x.status==='failed').length}</td><td>${v.filter(x=>['skipped','already_reposted'].includes(x.status)).length}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No company outcomes yet.</td></tr>';document.getElementById('memberAnalysis').innerHTML=Object.keys(byMember).length?Object.entries(byMember).map(([k,v])=>`<tr><td>${escapeHtml(k)}</td><td>${v.length}</td><td>${v.filter(x=>x.status==='confirmed').length}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">No member outcomes yet.</td></tr>'}
+function renderLog(){const f=document.getElementById('outcomeFilter').value,rows=f==='all'?model.reposts:model.reposts.filter(r=>r.status===f);document.getElementById('logBody').innerHTML=rows.length?rows.map(r=>`<tr><td>${escapeHtml(r.user_name||'-')}</td><td>${escapeHtml(r.company_name||'-')}<br><a href="${escapeHtml(r.original_post_url)}" target="_blank" rel="noopener">View post</a></td><td><span class="badge ${escapeHtml(r.status)}">${escapeHtml(r.status.replaceAll('_',' '))}</span></td><td>${escapeHtml(r.detail||'-')}</td><td>${escapeHtml(fmt(r.attempted_at||r.created_at))}</td></tr>`).join(''):`<tr><td colspan="5" class="empty">${model.reposts.length?'No outcomes match this filter.':'No outcomes yet.'}</td></tr>`}
+document.getElementById('outcomeFilter').addEventListener('change',renderLog);
+function detectExtension(){ext.installed=document.documentElement.hasAttribute('data-nexashare-ext');ext.version=ext.installed?document.documentElement.getAttribute('data-nexashare-ext'):null;ext.linkedIn=document.documentElement.getAttribute('data-nexashare-linkedin')==='1';renderExtension();if(ext.installed)window.dispatchEvent(new CustomEvent('nexashare-ext-get-status'));return ext.installed}
+window.addEventListener('nexashare-ext-ready',detectExtension);window.addEventListener('nexashare-ext-status',e=>{if(!e.detail?.ok)return;ext.connected=!!e.detail.connected;ext.lastSync=e.detail.lastSync||null;renderExtension()});window.dispatchEvent(new CustomEvent('nexashare-ext-ping'));setTimeout(detectExtension,600);
+function renderExtension(){const current=ext.installed&&ext.version===EXPECTED_EXTENSION_VERSION,steps={stepCompany:model.companies.length>0,stepExtension:ext.installed,stepConnect:ext.connected,stepLinkedIn:ext.linkedIn,stepRun:!!ext.lastSync};Object.entries(steps).forEach(([id,v])=>document.getElementById(id).classList.toggle('done',v));document.getElementById('extensionStatus').textContent=!ext.installed?`Not detected · expected v${EXPECTED_EXTENSION_VERSION}`:!current?`Installed v${ext.version} · update to v${EXPECTED_EXTENSION_VERSION}`:ext.connected?'Current and connected':'Current but not connected';const prompt=document.getElementById('updatePrompt');prompt.style.display=current?'none':'block';prompt.innerHTML=current?'':`<strong>${ext.installed?'Update required':'Extension missing'}</strong><p>Download v${EXPECTED_EXTENSION_VERSION}, extract it into the existing folder, then open Chrome Extensions and choose Reload. For a first install, enable Developer mode and choose Load unpacked. The website cannot install it automatically.</p>`;const notes=[];if(ext.installed&&!ext.connected)notes.push('Choose Connect browser. Reload the unpacked extension if it does not respond.');if(ext.installed&&!ext.linkedIn)notes.push('Open and sign in to LinkedIn, then keep that tab open.');if(ext.lastSync?.status==='paused')notes.push('All companies are paused. Resume one below.');if(ext.lastSync?.status==='not-logged-in')notes.push('The last run could not confirm a LinkedIn session.');if(ext.lastSync?.status==='reporting-failed'||ext.lastSync?.totalFailed)notes.push('The last run had a failure. Review Log and the extension log; no unconfirmed action counts as success.');document.getElementById('troubleshootingSteps').innerHTML=notes.length?notes.map(n=>`<p>${escapeHtml(n)}</p>`).join(''):'Ready-state checks will appear here.'}
+document.getElementById('connectExtension').addEventListener('click',async e=>{e.currentTarget.disabled=true;try{if(!detectExtension())throw Error('Install or reload the private extension first.');const c=await api('/api/extension/token',{method:'POST'});await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('Extension did not respond.')),5000);window.addEventListener('nexashare-ext-configured',function h(x){clearTimeout(t);window.removeEventListener('nexashare-ext-configured',h);x.detail?.ok?resolve():reject(Error(x.detail?.error||'Connection failed'))});window.dispatchEvent(new CustomEvent('nexashare-ext-configure',{detail:{apiToken:c.token,apiBase:c.apiBase}}))});ext.connected=true;renderExtension()}catch(x){document.getElementById('extensionStatus').textContent=x.message}finally{e.currentTarget.disabled=false}});
+function renderCompanies(){const el=document.getElementById('companyList');el.innerHTML=model.companies.length?model.companies.map(c=>`<div class="company-row"><span><strong>${escapeHtml(c.name)}</strong><br><span class="muted">linkedin.com/company/${escapeHtml(c.vanity)}</span></span><span><span class="badge ${c.enabled?'confirmed':'skipped'}">${c.enabled?'Automatic':'Paused'}</span> <button class="button secondary toggle" data-id="${Number(c.id)}" data-enabled="${c.enabled?'1':'0'}">${c.enabled?'Pause':'Resume'}</button></span></div>`).join(''):'<div class="empty">No companies configured.</div>';renderExtension()}
+document.getElementById('companyList').addEventListener('click',async e=>{const b=e.target.closest('.toggle');if(!b)return;b.disabled=true;try{await api(`/api/companies/${b.dataset.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:b.dataset.enabled!=='1'})});await loadCompanies()}catch(x){document.getElementById('companyMessage').textContent=x.message;b.disabled=false}});
+document.getElementById('companyForm').addEventListener('submit',async e=>{e.preventDefault();const msg=document.getElementById('companyMessage');try{const raw=document.getElementById('companyUrl').value.trim(),m=raw.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/company\/([a-zA-Z0-9._-]+)/i);if(!m)throw Error('Enter a full LinkedIn company URL.');const vanity=m[1].toLowerCase();await api('/api/companies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vanity,name:vanity.replaceAll('-',' ').replace(/\b\w/g,c=>c.toUpperCase())})});document.getElementById('companyUrl').value='';msg.textContent='Company added with automatic reposting enabled.';await loadCompanies()}catch(x){msg.textContent=x.message}});
+async function loadCompanies(){model.companies=(await api('/api/companies')).companies;renderCompanies();renderAnalysis()}
+async function load(){try{const [u,s,r,t,c,sub,h]=await Promise.all([api('/api/user'),api('/api/stats'),api('/api/reposts'),api('/api/team'),api('/api/companies'),api('/api/subscription'),api('/api/health')]);model={user:u,stats:s,reposts:r.reposts,team:t.members,companies:c.companies,subscription:sub};document.getElementById('userName').textContent=`${u.name||u.email}${u.team_name?' · '+u.team_name:''}`;document.getElementById('subscriptionText').textContent=sub.display_status==='trial'?`30-day free trial · ${sub.days_remaining} day(s) remaining · ends ${new Date(sub.trial_ends_at).toLocaleDateString()}`:`Trial period has ended; subscription activation is not yet verified.`;document.getElementById('upgradeLink').href=sub.checkout_url;document.getElementById('serviceHealth').textContent=h.status==='ready'?'Worker and database are ready.':'Service needs attention.';document.getElementById('serviceHealth').className=h.status==='ready'?'health-ready':'health-bad';renderDashboard();renderAnalysis();renderLog();renderCompanies()}catch(x){const message=escapeHtml(x.message);document.getElementById('summaryCards').innerHTML=`<div class="panel empty">Could not load dashboard: ${message}</div>`;document.getElementById('timelineChart').innerHTML='<div class="empty">Chart unavailable.</div>';document.getElementById('mixChart').innerHTML='<div class="empty">Chart unavailable.</div>';document.getElementById('companyAnalysis').innerHTML=`<tr><td colspan="4" class="empty">Analysis unavailable: ${message}</td></tr>`;document.getElementById('memberAnalysis').innerHTML='<tr><td colspan="3" class="empty">Analysis unavailable.</td></tr>';document.getElementById('logBody').innerHTML='<tr><td colspan="5" class="empty">Activity log unavailable.</td></tr>';document.getElementById('subscriptionText').textContent='Trial information is unavailable. No subscription status can be verified.';document.getElementById('companyList').innerHTML='<div class="empty">Company settings unavailable.</div>';document.getElementById('serviceHealth').textContent='Service readiness check failed.';document.getElementById('serviceHealth').className='health-bad'}}
 load();
-</script>
-</body>
-</html>
+</script></body></html>

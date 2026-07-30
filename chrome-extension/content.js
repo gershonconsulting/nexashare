@@ -57,7 +57,7 @@
       try {
         chrome.runtime.sendMessage({ action: 'getStatus' }, function (resp) {
           var detail = (!chrome.runtime.lastError && resp && resp.ok)
-            ? { ok: true, lastSync: resp.lastSync, companies: resp.companies }
+            ? { ok: true, connected: !!resp.connected, lastSync: resp.lastSync, companies: resp.companies }
             : { ok: false };
           window.dispatchEvent(new CustomEvent('nexashare-ext-status', { detail: detail }));
         });
@@ -79,6 +79,25 @@
         window.dispatchEvent(new CustomEvent('nexashare-ext-companies-saved', {
           detail: { ok: false, error: String(e) }
         }));
+      }
+    });
+
+    window.addEventListener('nexashare-ext-configure', function (ev) {
+      try {
+        var detail = (ev && ev.detail) || {};
+        chrome.runtime.sendMessage({
+          action: 'configure',
+          apiToken: detail.apiToken || '',
+          apiBase: detail.apiBase || ''
+        }, function (resp) {
+          window.dispatchEvent(new CustomEvent('nexashare-ext-configured', {
+            detail: (!chrome.runtime.lastError && resp && resp.ok)
+              ? { ok: true }
+              : { ok: false, error: (resp && resp.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) }
+          }));
+        });
+      } catch (e) {
+        window.dispatchEvent(new CustomEvent('nexashare-ext-configured', { detail: { ok: false, error: String(e) } }));
       }
     });
 

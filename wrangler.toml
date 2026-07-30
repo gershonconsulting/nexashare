@@ -2,6 +2,9 @@ name = "nexashare"
 main = "src/index.js"
 compatibility_date = "2024-12-01"
 
+[observability]
+enabled = true
+
 [assets]
 directory = "./public"
 binding = "ASSETS"
@@ -10,3 +13,11 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "nexashare-db"
 database_id = "a282afe3-af5f-44e3-9982-c49dd5bd641d"
+
+[[routes]]
+pattern = "nexashare.com"
+custom_domain = true
+
+[[routes]]
+pattern = "www.nexashare.com"
+custom_domain = true

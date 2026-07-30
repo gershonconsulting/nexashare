@@ -38,15 +38,15 @@ function renderCompanies() {
 
     var companies = resp.companies || [];
     if (companies.length === 0) {
-      companiesEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No companies added yet. Add a LinkedIn company page below.</div>';
+      companiesEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No companies configured. Open the dashboard to add one.</div>';
       return;
     }
 
     var html = '';
     for (var i = 0; i < companies.length; i++) {
       var c = companies[i];
-      var statusClass = c.autoRepost !== false ? 'on' : 'off';
-      var statusText = c.autoRepost !== false ? 'Auto' : 'Paused';
+      var statusClass = c.enabled !== 0 ? 'on' : 'off';
+      var statusText = c.enabled !== 0 ? 'Ready' : 'Paused';
       html += '<div class="company-item">' +
         '<span class="company-name">' + escapeHtml(c.name || c.vanity) + '</span>' +
         '<span class="company-status ' + statusClass + '">' + statusText + '</span>' +
@@ -59,7 +59,8 @@ function renderCompanies() {
       var ls = resp.lastSync;
       lastEl.innerHTML = 'Last sync ' + relTime(ls.ts) +
         ' \u00b7 ' + (ls.totalScraped || 0) + ' posts found' +
-        ' \u00b7 ' + (ls.totalReposted || 0) + ' reposted';
+        ' \u00b7 ' + (ls.totalConfirmed || 0) + ' confirmed' +
+        ' \u00b7 ' + (ls.totalFailed || 0) + ' failed';
     }
   });
 }
@@ -77,7 +78,8 @@ function renderLog() {
     if (done) {
       head = 'Last run ' + relTime(start && start.ts) +
         ' \u00b7 ' + (done.data && done.data.totalScraped || 0) + ' scraped' +
-        ' \u00b7 ' + (done.data && done.data.totalReposted || 0) + ' reposted';
+        ' \u00b7 ' + (done.data && done.data.totalConfirmed || 0) + ' confirmed' +
+        ' \u00b7 ' + (done.data && done.data.totalFailed || 0) + ' failed';
     } else {
       head = 'Last run ' + relTime(start && start.ts);
     }
@@ -104,7 +106,7 @@ function renderLog() {
 document.getElementById('sync-now').addEventListener('click', function (e) {
   var btn = e.currentTarget;
   btn.disabled = true;
-  show('Sync running in background\u2026', 'info');
+  show('Sync running. LinkedIn tabs will open while NexaShare checks and acts\u2026', 'info');
 
   chrome.runtime.sendMessage({ action: 'syncNow' }, function (response) {
     btn.disabled = false;
@@ -123,56 +125,26 @@ document.getElementById('sync-now').addEventListener('click', function (e) {
     if (r.status === 'not-logged-in') {
       show('Open a LinkedIn tab first, then try again.', 'err');
     } else if (r.status === 'no-companies') {
-      show('No companies configured. Add one below.', 'err');
+      show('No companies configured. Open the dashboard to add one.', 'err');
+    } else if (r.status === 'not-connected') {
+      show('Connect this extension from the NexaShare dashboard first.', 'err');
+    } else if (r.status === 'reporting-failed') {
+      show('Run finished, but outcomes could not be saved. Reconnect from the dashboard.', 'err');
+    } else if (r.status === 'paused') {
+      show('Automatic reposting is paused for every company. Resume a company in the dashboard.', 'info');
+    } else if (r.totalFailed) {
+      show('Run complete: ' + (r.totalConfirmed || 0) + ' confirmed, ' + r.totalFailed + ' not confirmed. See the log.', 'err');
     } else {
-      show('\u2713 Sync complete \u2014 ' + (r.totalScraped || 0) + ' posts found, ' + (r.totalReposted || 0) + ' reposted', 'ok');
+      show('\u2713 Run complete \u2014 ' + (r.totalConfirmed || 0) + ' reposts confirmed by LinkedIn', 'ok');
     }
     renderLog();
     renderCompanies();
   });
 });
 
-// --- Add company ---
+// --- Manage companies ---
 document.getElementById('add-btn').addEventListener('click', function () {
-  var form = document.getElementById('add-form');
-  form.style.display = form.style.display === 'none' ? 'block' : 'none';
-});
-
-document.getElementById('save-company').addEventListener('click', function () {
-  var url = document.getElementById('company-url').value.trim();
-  if (!url) return;
-
-  // Extract vanity from URL
-  var match = url.match(/linkedin\.com\/company\/([a-zA-Z0-9\-_.]+)/i);
-  var vanity = match ? match[1] : url.replace(/\//g, '').replace(/https?:/, '').replace('linkedin.com', '').replace('company', '');
-
-  if (!vanity) {
-    show('Enter a valid LinkedIn company URL', 'err');
-    return;
-  }
-
-  chrome.runtime.sendMessage({ action: 'getStatus' }, function (resp) {
-    var companies = (resp && resp.companies) || [];
-
-    if (companies.some(function (c) { return c.vanity === vanity; })) {
-      show('Company already added', 'info');
-      return;
-    }
-
-    companies.push({
-      vanity: vanity,
-      name: vanity.replace(/-/g, ' ').replace(/\b\w/g, function (l) { return l.toUpperCase(); }),
-      autoRepost: true,
-      addedAt: new Date().toISOString()
-    });
-
-    chrome.runtime.sendMessage({ action: 'setCompanies', companies: companies }, function () {
-      document.getElementById('company-url').value = '';
-      document.getElementById('add-form').style.display = 'none';
-      show('Company added: ' + vanity, 'ok');
-      renderCompanies();
-    });
-  });
+  chrome.tabs.create({ url: 'https://nexashare.com/dashboard.html' });
 });
 
 // Initial render

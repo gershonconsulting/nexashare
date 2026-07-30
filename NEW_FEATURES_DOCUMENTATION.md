@@ -1,5 +1,9 @@
 # NexaShare - Enhanced Features Documentation
 
+> Historical proposal only. The current secure MVP is manual, browser-based,
+> and does not request LinkedIn posting permission or call a posting API. See
+> `DEPLOYMENT.md` for the release architecture.
+
 ## 🎯 New Features Added
 
 ### 1. **Auto-Discover Companies from LinkedIn Profile**

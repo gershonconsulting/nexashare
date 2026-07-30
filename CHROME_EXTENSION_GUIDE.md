@@ -1,4 +1,8 @@
-# NexaShare Chrome Extension - Complete Guide
+# NexaShare Chrome Extension - Historical Guide
+
+> Do not use the cookie-extraction or Chrome Web Store instructions below.
+> The current extension is private, locally installed, and does not transmit
+> LinkedIn cookies. Follow `public/LOCAL_EXTENSION_TESTING.md`.
 
 ## 🎯 Why We Need This
 
