@@ -120,10 +120,17 @@ async function handleAuth(request, env) {
       await env.DB.prepare(
         "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+30 days'))"
       ).bind(await sha256(sessionToken), userId).run();
+      let destination = `${APP_ORIGIN}/dashboard.html`;
+      if (teamId) {
+        const companyCount = await env.DB.prepare(
+          'SELECT COUNT(*) AS count FROM companies WHERE team_id = ?'
+        ).bind(teamId).first();
+        if (!Number(companyCount?.count || 0)) destination = `${APP_ORIGIN}/onboarding.html`;
+      }
       return new Response(null, {
         status: 302,
         headers: {
-          Location: `${APP_ORIGIN}/dashboard.html`,
+          Location: destination,
           'Set-Cookie': setCookie('session', sessionToken)
         }
       });
