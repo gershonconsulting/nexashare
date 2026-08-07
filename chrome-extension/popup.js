@@ -2,7 +2,7 @@
 // Same pattern as radar's popup.js.
 
 const installedVersion = chrome.runtime.getManifest().version;
-document.getElementById('ver').textContent = 'v' + installedVersion;
+document.getElementById('ver').textContent = 'Version ' + installedVersion;
 
 const statusEl = document.getElementById('status');
 const lastEl = document.getElementById('last-sync');
