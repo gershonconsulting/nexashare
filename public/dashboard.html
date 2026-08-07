@@ -16,7 +16,7 @@
   <button class="nav-item" data-view="settings">Settings</button>
   <button class="nav-item" data-view="referral">Referral</button>
   <div class="sidebar-spacer"></div>
-  <div class="version">Version 1.2.2</div>
+  <div class="version">Version 1.2.3</div>
   <a class="nav-item" href="/api/auth/logout">Logout</a>
 </aside>
 <main class="content">
@@ -46,7 +46,7 @@
   <section class="view" id="view-settings">
     <div class="panel"><div class="toolbar"><div><h2>Subscription</h2><p class="muted" id="subscriptionText">Loading trial information...</p></div><a class="button" id="upgradeLink" href="https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00" target="_blank" rel="noopener noreferrer">Upgrade with Stripe</a></div><div class="notice warning" id="subscriptionNotice">Checkout and activation are not yet verified automatically. Live enforcement requires Stripe webhook configuration.</div></div>
     <div class="panel"><h2>Automatic reposting</h2><p class="muted">Checks once daily while Chrome is running and a signed-in LinkedIn tab is open. At most one unseen post per enabled company is attempted.</p><form class="form-row" id="companyForm"><input id="companyUrl" required placeholder="https://www.linkedin.com/company/company-name"><button class="button">Add company</button></form><div class="message" id="companyMessage"></div><div id="companyList"></div></div>
-    <div class="panel"><div class="toolbar"><div><h2>Private extension</h2><p class="muted" id="extensionStatus">Checking browser bridge...</p></div><div><a class="button secondary" href="/nexashare-extension.zip" download>Download version 1.2.2</a> <button class="button" id="connectExtension" disabled>Checking extension...</button></div></div><div id="updatePrompt" class="notice warning" style="display:none"></div><div class="checklist"><div class="check" id="stepCompany">Company</div><div class="check" id="stepExtension">Installed</div><div class="check" id="stepConnect">Connected</div><div class="check" id="stepLinkedIn">LinkedIn</div><div class="check" id="stepRun">First run</div></div><div class="notice" id="troubleshootingSteps" style="margin-top:12px">Checking...</div><p><a href="/extension-setup.html" target="_blank" rel="noopener">Open the extension installation and update guide</a></p></div>
+    <div class="panel"><div class="toolbar"><div><h2>Private extension</h2><p class="muted" id="extensionStatus">Checking browser bridge...</p></div><div><a class="button secondary" href="/nexashare-extension.zip" download>Download version 1.2.3</a> <button class="button" id="connectExtension" disabled>Checking extension...</button></div></div><div id="updatePrompt" class="notice warning" style="display:none"></div><div class="checklist"><div class="check" id="stepCompany">Company</div><div class="check" id="stepExtension">Installed</div><div class="check" id="stepConnect">Connected</div><div class="check" id="stepLinkedIn">LinkedIn</div><div class="check" id="stepRun">First run</div></div><div class="notice" id="troubleshootingSteps" style="margin-top:12px">Checking...</div><p><a href="/extension-setup.html" target="_blank" rel="noopener">Open the extension installation and update guide</a></p></div>
     <div class="panel"><h2>Service readiness</h2><p id="serviceHealth" class="muted">Checking Worker and database...</p></div>
   </section>
 
@@ -55,7 +55,7 @@
   </section>
 </main></div>
 <script>
-const EXPECTED_EXTENSION_VERSION='1.2.2';
+const EXPECTED_EXTENSION_VERSION='1.2.3';
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let model={user:null,stats:null,reposts:[],team:[],companies:[],subscription:null};
 let ext={installed:false,version:null,connected:false,linkedIn:false,lastSync:null};

@@ -44,7 +44,7 @@ form.addEventListener('submit',async event=>{
   const companyPattern=/^https?:\/\/(?:[a-z]{2,3}\.)?(?:www\.)?linkedin\.com\/company\/([a-zA-Z0-9._-]+)\/?(?:[?#].*)?$/i;
   const rawUrls=[input.value.trim(),...partnerInput.value.split(/\r?\n/).map(value=>value.trim()).filter(Boolean)];
   const entries=[];
-  for(const raw of rawUrls){const match=raw.match(companyPattern);if(!match){message.textContent=`This is not a full LinkedIn company-page link: ${raw}`;message.className='message error';return}const vanity=match[1].toLowerCase();if(!entries.some(entry=>entry.vanity===vanity))entries.push({vanity,name:vanity.replaceAll('-',' ').replace(/\b\w/g,character=>character.toUpperCase())})}
+  for(const raw of rawUrls){const match=raw.match(companyPattern);if(!match){message.textContent=`This is not a full LinkedIn company-page link: ${raw}`;message.className='message error';return}const vanity=match[1].toLowerCase();const placeholder=/^\d+$/.test(vanity)?`LinkedIn company ${vanity}`:vanity.replaceAll('-',' ').replace(/\b\w/g,character=>character.toUpperCase());if(!entries.some(entry=>entry.vanity===vanity))entries.push({vanity,name:placeholder})}
   button.disabled=true;button.textContent='Saving company...';
   try{
     for(const entry of entries)await api('/api/companies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
