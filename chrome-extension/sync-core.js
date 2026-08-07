@@ -124,7 +124,18 @@ async function runFullSync({ trigger = 'manual' } = {}) {
   }
   for (const company of enabledCompanies) {
     try {
-      const posts = await scrapeCompanyPosts(company);
+      const scraped = await scrapeCompanyPosts(company);
+      const posts = scraped.posts;
+      if (scraped.companyName && scraped.companyName !== company.name) {
+        await authenticatedFetch(`/api/companies/${company.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: scraped.companyName })
+        });
+        company.name = scraped.companyName;
+        await chrome.storage.local.set({ companies });
+        await log('info', 'company:name-resolved', { companyId: company.id, name: company.name });
+      }
       totalScraped += posts.length;
       await log('info', 'company:scraped', { company: company.name, posts: posts.length });
       const seen = new Set(processedPostIds[String(company.id)] || []);
@@ -212,12 +223,12 @@ async function scrapeCompanyPosts(company) {
       await chrome.scripting.executeScript({ target: { tabId }, func: () => window.scrollBy(0, 1500) });
       await sleep(SCROLL_DELAY_MS);
     }
-    const results = await chrome.scripting.executeScript({ target: { tabId }, func: extractPostsFromDOM });
-    return results?.[0]?.result || [];
+    const results = await chrome.scripting.executeScript({ target: { tabId }, func: extractCompanyPageFromDOM });
+    return results?.[0]?.result || { companyName: '', posts: [] };
   });
 }
 
-function extractPostsFromDOM() {
+function extractCompanyPageFromDOM() {
   const posts = [];
   document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], .occludable-update').forEach(item => {
     const text = item.querySelector('.feed-shared-text, .update-components-text, [data-test-id="main-feed-activity-card__commentary"]')?.textContent?.trim() || '';
@@ -236,7 +247,11 @@ function extractPostsFromDOM() {
       )
     });
   });
-  return posts;
+  const heading = document.querySelector('h1.org-top-card-summary__title, h1.org-top-card-summary-info-list__info-item, main h1');
+  const metaTitle = document.querySelector('meta[property="og:title"]')?.content || '';
+  const rawName = heading?.textContent?.trim() || metaTitle.replace(/\s*[|\-]\s*LinkedIn.*$/i, '').trim();
+  const companyName = rawName && !/^\d+$/.test(rawName) && !/^linkedin$/i.test(rawName) ? rawName.slice(0, 100) : '';
+  return { companyName, posts };
 }
 
 async function repostContent(post) {
