@@ -5,6 +5,12 @@ account creation date and links to this existing Stripe-hosted checkout:
 
 `https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00`
 
+If the first 30 calendar days end without a LinkedIn-confirmed repost, the
+informational free-access state continues until the first confirmed repost.
+Failed, skipped, already-reposted, and otherwise unverified outcomes do not end
+this extension. Once a confirmed repost exists after the initial period, the UI
+shows that the free period is complete, but does not enforce payment by itself.
+
 This is a UI and API foundation only. It does not currently verify checkout,
 activate a subscription, restrict product access, cancel access, or reconcile
 Stripe state.
