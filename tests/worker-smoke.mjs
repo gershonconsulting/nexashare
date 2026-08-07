@@ -50,11 +50,13 @@ const workerSource = await readFile(new URL('../src/index.js', import.meta.url),
 const extensionSource = await readFile(new URL('../chrome-extension/sync-core.js', import.meta.url), 'utf8');
 const manifest = JSON.parse(await readFile(new URL('../chrome-extension/manifest.json', import.meta.url), 'utf8'));
 const dashboardSource = await readFile(new URL('../public/dashboard.html', import.meta.url), 'utf8');
+const onboardingSource = await readFile(new URL('../public/onboarding.html', import.meta.url), 'utf8');
 assert.match(workerSource, /openid profile email/);
 assert.doesNotMatch(workerSource, /w_member_social|ugcPosts|\/v2\/shares/);
 assert.match(workerSource, /UPDATE companies SET enabled/);
 assert.match(workerSource, /https:\/\/buy\.stripe\.com\/5kQdRb1rc6mvfcZ8yvcfK00/);
 assert.match(workerSource, /enforcement: 'not_configured'/);
+assert.match(workerSource, /destination = `\$\{APP_ORIGIN\}\/onboarding\.html`/);
 assert.match(extensionSource, /LinkedIn visibly changed the repost control/);
 assert.match(extensionSource, /chrome\.alarms/);
 assert.match(extensionSource, /periodInMinutes: 1440/);
@@ -65,5 +67,8 @@ assert.ok(manifest.permissions.includes('alarms'));
 assert.match(dashboardSource, /EXPECTED_EXTENSION_VERSION\s*=\s*'1\.2\.0'/);
 assert.match(dashboardSource, /Load unpacked/);
 assert.match(dashboardSource, /Not detected/);
+assert.match(onboardingSource, /Which company should NexaShare follow\?/);
+assert.match(onboardingSource, /\/api\/companies/);
+assert.match(onboardingSource, /LinkedIn visibly confirms it/);
 
 console.log('Worker and extension smoke checks passed.');
