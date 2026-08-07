@@ -245,15 +245,25 @@ async function handleAPI(request, env) {
 
   const companyMatch = url.pathname.match(/^\/api\/companies\/(\d+)$/);
   if (companyMatch && request.method === 'PATCH') {
-    const user = await getUser(request, env);
+    const user = await getUser(request, env) || await getExtensionUser(request, env);
     if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
     const body = await request.json();
-    if (typeof body.enabled !== 'boolean') return jsonResponse({ error: 'Enabled must be true or false' }, 400);
-    const result = await env.DB.prepare(
-      'UPDATE companies SET enabled = ? WHERE id = ? AND team_id = ?'
-    ).bind(body.enabled ? 1 : 0, Number(companyMatch[1]), user.team_id).run();
+    let result;
+    if (typeof body.name === 'string') {
+      const name = body.name.trim().replace(/\s+/g, ' ').slice(0, 100);
+      if (name.length < 2 || /^\d+$/.test(name) || /^linkedin$/i.test(name)) return jsonResponse({ error: 'Invalid company name' }, 400);
+      result = await env.DB.prepare(
+        'UPDATE companies SET name = ? WHERE id = ? AND team_id = ?'
+      ).bind(name, Number(companyMatch[1]), user.team_id).run();
+    } else if (typeof body.enabled === 'boolean') {
+      result = await env.DB.prepare(
+        'UPDATE companies SET enabled = ? WHERE id = ? AND team_id = ?'
+      ).bind(body.enabled ? 1 : 0, Number(companyMatch[1]), user.team_id).run();
+    } else {
+      return jsonResponse({ error: 'Provide a company name or enabled state' }, 400);
+    }
     if (!result.meta.changes) return jsonResponse({ error: 'Company not found' }, 404);
-    return jsonResponse({ success: true, enabled: body.enabled });
+    return jsonResponse({ success: true, enabled: body.enabled, name: body.name });
   }
 
   if (url.pathname === '/api/extension/token' && request.method === 'POST') {
