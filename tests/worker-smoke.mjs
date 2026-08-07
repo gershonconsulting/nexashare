@@ -68,6 +68,8 @@ assert.match(dashboardSource, /EXPECTED_EXTENSION_VERSION\s*=\s*'1\.2\.0'/);
 assert.match(dashboardSource, /Load unpacked/);
 assert.match(dashboardSource, /Not detected/);
 assert.match(onboardingSource, /Which company should NexaShare follow\?/);
+assert.match(onboardingSource, /Partners or clients to follow/);
+assert.match(onboardingSource, /one LinkedIn company-page link per line/);
 assert.match(onboardingSource, /\/api\/companies/);
 assert.match(onboardingSource, /LinkedIn visibly confirms it/);
 
