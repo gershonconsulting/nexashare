@@ -1,348 +1,328 @@
-// =============================================================
-// NexaShare — LinkedIn Content Amplifier (sync-core.js / service worker)
-// Based on proven patterns from radar + social extensions.
-//
-// Architecture:
-// 1. Fetches company list from NexaShare API
-// 2. Opens company LinkedIn pages in background tabs
-// 3. Injects scraper to read posts from rendered DOM
-// 4. Reposts content to user's feed via native repost button
-// 5. Reports results back to NexaShare API
-// =============================================================
-
 const API_BASE = 'https://nexashare.com';
 const MAX_SCROLL_ATTEMPTS = 5;
 const SCROLL_DELAY_MS = 2000;
 const REPOST_DELAY_MS = 3000;
 const PAGE_LOAD_MS = 6000;
-
-// --- Logging (same pattern as radar) ---
 const MAX_LOG_ENTRIES = 200;
+const DAILY_ALARM = 'dailyRepost';
 
-async function log(level, msg, data) {
-  const entry = { ts: new Date().toISOString(), level, msg, data: data !== undefined ? data : null };
-  console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log']('[NexaShare]', msg, data !== undefined ? data : '');
-  try {
-    const stored = await chrome.storage.local.get('nexashareLog');
-    const arr = stored.nexashareLog || [];
-    arr.unshift(entry);
-    await chrome.storage.local.set({ nexashareLog: arr.slice(0, MAX_LOG_ENTRIES) });
-  } catch (e) {}
+async function log(level, message, data) {
+  const entry = { ts: new Date().toISOString(), level, msg: message, data: data === undefined ? null : data };
+  console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log']('[NexaShare]', message, data || '');
+  const stored = await chrome.storage.local.get('nexashareLog');
+  await chrome.storage.local.set({ nexashareLog: [entry, ...(stored.nexashareLog || [])].slice(0, MAX_LOG_ENTRIES) });
 }
 
-async function clearLog() {
-  await chrome.storage.local.set({ nexashareLog: [] });
-}
-
-// --- Alarms (daily auto-sync, same as social v0.10.0) ---
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create('dailyRepost', { delayInMinutes: 15, periodInMinutes: 1440 });
-  log('info', 'Extension installed, daily alarm set');
+  ensureDailyAlarm();
   chrome.action.setBadgeBackgroundColor({ color: '#0A66C2' });
+  log('info', 'Extension installed; automatic daily check enabled');
 });
 
+chrome.runtime.onStartup.addListener(ensureDailyAlarm);
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === 'dailyRepost') {
-    log('info', 'Daily alarm triggered');
-    runFullSync();
+  if (alarm.name === DAILY_ALARM) {
+    runFullSync({ trigger: 'scheduled' }).catch(error => log('error', 'scheduled-run:failed', { error: String(error) }));
   }
 });
 
-// --- Messages (same pattern as radar + social) ---
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === 'syncNow') {
-    runFullSync()
-      .then(r => sendResponse({ ok: true, result: r }))
-      .catch(e => sendResponse({ ok: false, error: String(e) }));
+async function ensureDailyAlarm() {
+  const existing = await chrome.alarms.get(DAILY_ALARM);
+  if (!existing) chrome.alarms.create(DAILY_ALARM, { delayInMinutes: 15, periodInMinutes: 1440 });
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'syncNow') {
+    runFullSync({ trigger: 'manual' }).then(result => sendResponse({ ok: true, result })).catch(error => sendResponse({ ok: false, error: String(error) }));
     return true;
   }
-  if (msg.action === 'getLog') {
-    chrome.storage.local.get('nexashareLog', d => sendResponse({ ok: true, log: d.nexashareLog || [] }));
+  if (message.action === 'getLog') {
+    chrome.storage.local.get('nexashareLog', data => sendResponse({ ok: true, log: data.nexashareLog || [] }));
     return true;
   }
-  if (msg.action === 'clearLog') {
-    clearLog().then(() => sendResponse({ ok: true }));
+  if (message.action === 'clearLog') {
+    chrome.storage.local.set({ nexashareLog: [] }, () => sendResponse({ ok: true }));
     return true;
   }
-  if (msg.action === 'getStatus') {
-    chrome.storage.local.get(['lastSyncResult', 'companies'], d => {
-      sendResponse({ ok: true, lastSync: d.lastSyncResult || null, companies: d.companies || [] });
-    });
+  if (message.action === 'getStatus') {
+    chrome.storage.local.get(['lastSyncResult', 'companies', 'apiToken'], data => sendResponse({
+      ok: true,
+      connected: !!data.apiToken,
+      lastSync: data.lastSyncResult || null,
+      companies: data.companies || []
+    }));
     return true;
   }
-  if (msg.action === 'setCompanies') {
-    chrome.storage.local.set({ companies: msg.companies || [] }, () => {
-      sendResponse({ ok: true });
-    });
+  if (message.action === 'setCompanies') {
+    sendResponse({ ok: false, error: 'Add companies in the NexaShare dashboard.' });
     return true;
   }
-  if (msg.action === 'salesNavStatus') {
-    chrome.tabs.query({ url: 'https://www.linkedin.com/*' }, tabs => {
-      sendResponse({ ok: tabs.length > 0 });
-    });
+  if (message.action === 'configure') {
+    if (!message.apiToken || message.apiBase !== API_BASE) {
+      sendResponse({ ok: false, error: 'Invalid NexaShare configuration.' });
+    } else {
+      chrome.storage.local.set({ apiToken: message.apiToken, apiBase: API_BASE }, () => sendResponse({ ok: true }));
+    }
+    return true;
+  }
+  if (message.action === 'salesNavStatus') {
+    hasLinkedInSession().then(ok => sendResponse({ ok }));
     return true;
   }
 });
 
-// --- Main sync flow ---
-async function runFullSync() {
-  await clearLog();
-  await log('info', 'run:start');
-  setBadge('\u2026', '#6b7280');
+async function authenticatedFetch(path, options = {}) {
+  const stored = await chrome.storage.local.get(['apiToken', 'apiBase']);
+  if (!stored.apiToken || stored.apiBase !== API_BASE) throw new Error('Connect the extension from the NexaShare dashboard first.');
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: { ...(options.headers || {}), Authorization: `Bearer ${stored.apiToken}` }
+  });
+  if (!response.ok) throw new Error(`NexaShare API returned HTTP ${response.status}. Reconnect the extension from the dashboard.`);
+  return response.json();
+}
 
-  const loggedIn = await checkLinkedInLogin();
-  await log('info', 'login-check', { loggedIn });
-  if (!loggedIn) {
-    await log('warn', 'Not logged into LinkedIn \u2014 open a LinkedIn tab first');
+async function runFullSync({ trigger = 'manual' } = {}) {
+  await chrome.storage.local.set({ nexashareLog: [] });
+  await log('info', 'run:start', { trigger });
+  setBadge('…', '#6b7280');
+
+  if (!(await hasLinkedInSession())) {
+    await log('warn', 'Automatic reposting is waiting for an open, signed-in LinkedIn tab.', { trigger });
     setBadge('!', '#dc2626');
-    return { status: 'not-logged-in' };
+    const waiting = { status: 'not-logged-in', trigger, ts: new Date().toISOString() };
+    await chrome.storage.local.set({ lastSyncResult: waiting });
+    return waiting;
   }
 
-  const stored = await chrome.storage.local.get('companies');
-  const companies = stored.companies || [];
-  await log('info', 'companies', { count: companies.length });
+  let companies;
+  try {
+    const data = await authenticatedFetch('/api/companies');
+    companies = data.companies || [];
+    await chrome.storage.local.set({ companies });
+  } catch (error) {
+    await log('error', 'configuration:failed', { error: String(error) });
+    setBadge('!', '#dc2626');
+    return { status: 'not-connected', error: String(error) };
+  }
 
-  if (companies.length === 0) {
-    await log('warn', 'No companies configured \u2014 add company pages on nexashare.com');
+  if (!companies.length) {
+    await log('warn', 'No companies configured. Add one in the NexaShare dashboard.');
     setBadge('!', '#f59e0b');
     return { status: 'no-companies' };
   }
 
-  const results = [];
-  for (const company of companies) {
+  const pendingStore = await chrome.storage.local.get('pendingOutcomes');
+  const outcomes = [...(pendingStore.pendingOutcomes || [])];
+  const priorPendingCount = outcomes.length;
+  let totalScraped = 0;
+  const dedupeStore = await chrome.storage.local.get('processedPostIds');
+  const processedPostIds = dedupeStore.processedPostIds || {};
+  const enabledCompanies = companies.filter(item => item.enabled !== 0);
+  if (!enabledCompanies.length) {
+    for (const company of companies) outcomes.push(makeCompanyOutcome(company, 'skipped', 'Automatic reposting is paused for this company.'));
+  }
+  for (const company of enabledCompanies) {
     try {
-      await log('info', 'company:start', { name: company.name, vanity: company.vanity });
       const posts = await scrapeCompanyPosts(company);
-      await log('info', 'company:scraped', { name: company.name, postCount: posts.length });
-
-      let reposted = 0;
-      if (company.autoRepost !== false) {
-        for (const post of posts) {
-          if (post.alreadyReposted) continue;
-          try {
-            const success = await repostContent(post);
-            if (success) reposted++;
-            await sleep(REPOST_DELAY_MS + Math.random() * 2000);
-          } catch (e) {
-            await log('warn', 'repost:failed', { postId: post.id, error: String(e) });
-          }
+      totalScraped += posts.length;
+      await log('info', 'company:scraped', { company: company.name, posts: posts.length });
+      const seen = new Set(processedPostIds[String(company.id)] || []);
+      let candidateHandled = false;
+      for (const post of posts) {
+        if (!post.url || seen.has(post.id)) continue;
+        if (post.alreadyReposted) {
+          outcomes.push(makeOutcome(company, post, 'already_reposted', 'LinkedIn already showed this post as reposted.'));
+          rememberPost(seen, post.id);
+          continue;
         }
+        candidateHandled = true;
+        try {
+          const result = await repostContent(post);
+          outcomes.push(makeOutcome(company, post, result.confirmed ? 'confirmed' : 'failed', result.detail));
+          if (result.confirmed) rememberPost(seen, post.id);
+        } catch (error) {
+          outcomes.push(makeOutcome(company, post, 'failed', String(error)));
+        }
+        await sleep(REPOST_DELAY_MS + Math.random() * 2000);
+        break;
       }
-
-      await log('info', 'company:done', { name: company.name, scraped: posts.length, reposted });
-      results.push({
-        companyVanity: company.vanity,
-        companyName: company.name,
-        postsScraped: posts.length,
-        postsReposted: reposted,
-        posts: posts.map(p => ({
-          externalPostId: p.id,
-          postUrl: p.url,
-          postTextSnippet: (p.text || '').slice(0, 280),
-          publishedAtUtc: p.date,
-          likeCount: p.likes || 0,
-          commentCount: p.comments || 0,
-          shareCount: p.shares || 0,
-          reposted: p.alreadyReposted || false
-        }))
-      });
-    } catch (err) {
-      await log('error', 'company:error', { name: company.name, error: String(err) });
-      results.push({ companyVanity: company.vanity, companyName: company.name, error: String(err) });
+      if (!candidateHandled && !posts.some(post => post.alreadyReposted && !seen.has(post.id))) {
+        outcomes.push(makeCompanyOutcome(company, 'skipped', posts.length ? 'No new eligible posts were found.' : 'No posts were found on the company page.'));
+      }
+      processedPostIds[String(company.id)] = [...seen].slice(-500);
+    } catch (error) {
+      await log('error', 'company:failed', { company: company.name, error: String(error) });
+      outcomes.push(makeCompanyOutcome(company, 'failed', String(error)));
     }
   }
+  await chrome.storage.local.set({ processedPostIds });
 
+  let reported = false;
   try {
-    await log('info', 'ingest:start');
-    await ingestResults(results);
-    await log('info', 'ingest:done');
-  } catch (e) {
-    await log('warn', 'ingest:failed (offline mode)', { error: String(e) });
+    if (outcomes.length) {
+      await authenticatedFetch('/api/extension/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcomes })
+      });
+    }
+    reported = true;
+    await chrome.storage.local.set({ pendingOutcomes: [] });
+  } catch (error) {
+    await log('error', 'reporting:failed', { error: String(error) });
+    await chrome.storage.local.set({ pendingOutcomes: outcomes.slice(-200) });
   }
 
-  const syncResult = {
+  const result = {
+    status: !reported ? 'reporting-failed' : (!enabledCompanies.length ? 'paused' : 'complete'),
+    trigger,
     ts: new Date().toISOString(),
-    companies: results.length,
-    totalScraped: results.reduce((s, r) => s + (r.postsScraped || 0), 0),
-    totalReposted: results.reduce((s, r) => s + (r.postsReposted || 0), 0),
-    errors: results.filter(r => r.error).length
+    companies: companies.length,
+    totalScraped,
+    totalConfirmed: outcomes.filter(item => item.status === 'confirmed').length,
+    totalFailed: outcomes.filter(item => item.status === 'failed').length,
+    totalAlreadyReposted: outcomes.filter(item => item.status === 'already_reposted').length,
+    retriedOutcomes: priorPendingCount
   };
-  await chrome.storage.local.set({ lastSyncResult: syncResult });
-  await log('info', 'run:done', syncResult);
-
-  setBadge('\u2713', '#059669');
-  setTimeout(() => setBadge('', ''), 3600000);
-  return syncResult;
+  await chrome.storage.local.set({ lastSyncResult: result });
+  await log('info', 'run:done', result);
+  setBadge(result.totalFailed || !reported ? '!' : '✓', result.totalFailed || !reported ? '#dc2626' : '#059669');
+  return result;
 }
 
-function checkLinkedInLogin() {
-  return new Promise(resolve => {
-    chrome.tabs.query({ url: 'https://www.linkedin.com/*' }, tabs => {
-      resolve(tabs.length > 0);
-    });
-  });
+async function hasLinkedInSession() {
+  const tabs = await chrome.tabs.query({ url: 'https://www.linkedin.com/*' });
+  for (const tab of tabs) {
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => !!document.querySelector('#global-nav, .global-nav__me, a[href*="/in/"]')
+      });
+      if (results?.[0]?.result) return true;
+    } catch (error) {}
+  }
+  return false;
 }
 
 async function scrapeCompanyPosts(company) {
-  const url = \`https://www.linkedin.com/company/\${company.vanity}/posts/?feedView=all\`;
-  await log('info', 'scrape:navigate', { url });
-
-  return new Promise((resolve, reject) => {
-    chrome.tabs.create({ url, active: false }, tab => {
-      const tabId = tab.id;
-      setTimeout(async () => {
-        try {
-          for (let i = 0; i < MAX_SCROLL_ATTEMPTS; i++) {
-            await chrome.scripting.executeScript({
-              target: { tabId },
-              func: () => window.scrollBy(0, 1500)
-            });
-            await sleep(SCROLL_DELAY_MS);
-          }
-          const results = await chrome.scripting.executeScript({
-            target: { tabId },
-            func: extractPostsFromDOM
-          });
-          chrome.tabs.remove(tabId);
-          const posts = (results && results[0]) ? results[0].result || [] : [];
-          resolve(posts);
-        } catch (e) {
-          try { chrome.tabs.remove(tabId); } catch (_) {}
-          reject(e);
-        }
-      }, PAGE_LOAD_MS);
-    });
+  const url = `https://www.linkedin.com/company/${company.vanity}/posts/?feedView=all`;
+  return withBackgroundTab(url, async tabId => {
+    for (let index = 0; index < MAX_SCROLL_ATTEMPTS; index++) {
+      await chrome.scripting.executeScript({ target: { tabId }, func: () => window.scrollBy(0, 1500) });
+      await sleep(SCROLL_DELAY_MS);
+    }
+    const results = await chrome.scripting.executeScript({ target: { tabId }, func: extractPostsFromDOM });
+    return results?.[0]?.result || [];
   });
 }
 
 function extractPostsFromDOM() {
   const posts = [];
-  const feedItems = document.querySelectorAll(
-    '.feed-shared-update-v2, [data-urn*="activity"], .occludable-update'
-  );
-  feedItems.forEach(item => {
-    try {
-      const textEl = item.querySelector(
-        '.feed-shared-text, .update-components-text, [data-test-id="main-feed-activity-card__commentary"]'
-      );
-      const text = textEl ? textEl.textContent.trim() : '';
-      const activityLink = item.querySelector('a[href*="/feed/update/"]');
-      const urn = item.getAttribute('data-urn') || '';
-      const activityMatch = urn.match(/activity:(\\d+)/) ||
-                           (activityLink && activityLink.href.match(/activity:(\\d+)/));
-      const activityId = activityMatch ? activityMatch[1] : '';
-      if (!text && !activityId) return;
-
-      const likesEl = item.querySelector('.social-details-social-counts__reactions-count, [aria-label*="reaction"]');
-      const commentsEl = item.querySelector('.social-details-social-counts__comments, [aria-label*="comment"]');
-      const sharesEl = item.querySelector('[aria-label*="repost"]');
-      const parseNum = el => {
-        if (!el) return 0;
-        const t = el.textContent.replace(/[^0-9,.]/g, '').replace(/,/g, '');
-        return parseInt(t, 10) || 0;
-      };
-
-      const repostBtn = item.querySelector('button[aria-label*="Repost"], button[aria-label*="repost"]');
-      const alreadyReposted = repostBtn ?
-        (repostBtn.getAttribute('aria-pressed') === 'true' ||
-         repostBtn.classList.contains('react-button--active')) : false;
-
-      const timeEl = item.querySelector('time, .feed-shared-actor__sub-description');
-      const timeText = timeEl ? timeEl.getAttribute('datetime') || timeEl.textContent.trim() : '';
-
-      posts.push({
-        id: activityId || 'post-' + posts.length,
-        url: activityId ? \`https://www.linkedin.com/feed/update/urn:li:activity:\${activityId}/\` : '',
-        text,
-        date: timeText || new Date().toISOString(),
-        likes: parseNum(likesEl),
-        comments: parseNum(commentsEl),
-        shares: parseNum(sharesEl),
-        alreadyReposted
-      });
-    } catch (e) {}
+  document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], .occludable-update').forEach(item => {
+    const text = item.querySelector('.feed-shared-text, .update-components-text, [data-test-id="main-feed-activity-card__commentary"]')?.textContent?.trim() || '';
+    const link = item.querySelector('a[href*="/feed/update/"]');
+    const match = (item.getAttribute('data-urn') || '').match(/activity:(\d+)/) || link?.href?.match(/activity:(\d+)/);
+    if (!text && !match) return;
+    const button = item.querySelector('button[aria-label*="Repost"], button[aria-label*="repost"]');
+    posts.push({
+      id: match?.[1] || `post-${posts.length}`,
+      url: match ? `https://www.linkedin.com/feed/update/urn:li:activity:${match[1]}/` : '',
+      text,
+      alreadyReposted: !!button && (
+        button.getAttribute('aria-pressed') === 'true' ||
+        button.classList.contains('react-button--active') ||
+        /undo repost|remove repost/i.test(button.getAttribute('aria-label') || button.textContent)
+      )
+    });
   });
   return posts;
 }
 
 async function repostContent(post) {
-  if (!post.url) return false;
-  await log('info', 'repost:start', { postId: post.id, url: post.url });
+  await log('info', 'repost:attempt', { postId: post.id, url: post.url });
+  return withBackgroundTab(post.url, async tabId => {
+    const results = await chrome.scripting.executeScript({ target: { tabId }, func: clickAndConfirmRepost });
+    const result = results?.[0]?.result || { confirmed: false, detail: 'LinkedIn did not return an outcome.' };
+    await log(result.confirmed ? 'info' : 'warn', result.confirmed ? 'repost:confirmed' : 'repost:not-confirmed', { postId: post.id, detail: result.detail });
+    return result;
+  });
+}
 
-  return new Promise((resolve, reject) => {
-    chrome.tabs.create({ url: post.url, active: false }, tab => {
-      const tabId = tab.id;
-      setTimeout(async () => {
-        try {
-          const results = await chrome.scripting.executeScript({
-            target: { tabId },
-            func: clickRepostButton
-          });
-          chrome.tabs.remove(tabId);
-          const success = results && results[0] && results[0].result;
-          resolve(success);
-        } catch (e) {
-          try { chrome.tabs.remove(tabId); } catch (_) {}
-          reject(e);
-        }
-      }, PAGE_LOAD_MS);
+async function clickAndConfirmRepost() {
+  const button = [...document.querySelectorAll('button')].find(item => {
+    const label = (item.getAttribute('aria-label') || '').toLowerCase();
+    return label.includes('repost') || item.textContent.toLowerCase().includes('repost');
+  });
+  if (!button) return { confirmed: false, detail: 'Repost button was not found in the visible LinkedIn UI.' };
+  if (button.getAttribute('aria-pressed') === 'true') return { confirmed: false, detail: 'Post was already reposted.' };
+  button.click();
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  const action = [...document.querySelectorAll('[role="menuitem"], .artdeco-dropdown__item, .social-reshare-button')].find(item => {
+    const text = item.textContent.toLowerCase();
+    return text.includes('repost') && !text.includes('with your thoughts') && !text.includes('quote');
+  });
+  if (!action) return { confirmed: false, detail: 'LinkedIn did not show a direct repost action.' };
+  action.click();
+  for (let attempt = 0; attempt < 8; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const current = [...document.querySelectorAll('button')].find(item => {
+      const label = (item.getAttribute('aria-label') || '').toLowerCase();
+      return label.includes('repost') || item.textContent.toLowerCase().includes('repost');
     });
-  });
-}
-
-function clickRepostButton() {
-  const btns = document.querySelectorAll('button');
-  let repostBtn = null;
-  for (const btn of btns) {
-    const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-    const text = btn.textContent.toLowerCase();
-    if (label.includes('repost') || text.includes('repost')) {
-      repostBtn = btn;
-      break;
-    }
+    if (current && (
+      current.getAttribute('aria-pressed') === 'true' ||
+      current.classList.contains('react-button--active') ||
+      /undo repost|remove repost/i.test(current.getAttribute('aria-label') || current.textContent)
+    )) return { confirmed: true, detail: 'LinkedIn visibly changed the repost control to its active state.' };
   }
-  if (!repostBtn) return false;
-  if (repostBtn.getAttribute('aria-pressed') === 'true') return false;
-  repostBtn.click();
-
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const menuItems = document.querySelectorAll('[role="menuitem"], .artdeco-dropdown__item, .social-reshare-button');
-      for (const mi of menuItems) {
-        const t = mi.textContent.toLowerCase();
-        if (t.includes('repost') && !t.includes('with your thoughts') && !t.includes('quote')) {
-          mi.click();
-          resolve(true);
-          return;
-        }
-      }
-      resolve(false);
-    }, 1500);
-  });
+  return { confirmed: false, detail: 'The action was clicked, but LinkedIn did not visibly confirm the repost.' };
 }
 
-async function ingestResults(results) {
-  const stored = await chrome.storage.local.get('apiToken');
-  const token = stored.apiToken || '';
-  const resp = await fetch(\`\${API_BASE}/api/extension/ingest\`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': \`Bearer \${token}\` } : {})
-    },
-    body: JSON.stringify({ results })
-  });
-  if (!resp.ok) throw new Error(\`Ingest failed: HTTP \${resp.status}\`);
-  return resp.json();
+async function withBackgroundTab(url, operation) {
+  const tab = await chrome.tabs.create({ url, active: true });
+  try {
+    await sleep(PAGE_LOAD_MS);
+    return await operation(tab.id);
+  } finally {
+    try { await chrome.tabs.remove(tab.id); } catch (error) {}
+  }
+}
+
+function makeOutcome(company, post, status, detail) {
+  const timestamp = new Date().toISOString();
+  return {
+    companyName: company.name,
+    postUrl: post.url,
+    postTextSnippet: (post.text || '').slice(0, 500),
+    status,
+    detail,
+    attemptedAt: timestamp,
+    confirmedAt: status === 'confirmed' ? timestamp : null
+  };
+}
+
+function makeCompanyOutcome(company, status, detail) {
+  return {
+    companyName: company.name,
+    postUrl: `https://www.linkedin.com/company/${company.vanity}/posts/`,
+    postTextSnippet: '',
+    status,
+    detail,
+    attemptedAt: new Date().toISOString(),
+    confirmedAt: null
+  };
+}
+
+function rememberPost(seen, postId) {
+  if (postId) seen.add(postId);
 }
 
 function setBadge(text, color) {
-  try {
-    chrome.action.setBadgeText({ text });
-    if (color) chrome.action.setBadgeBackgroundColor({ color });
-  } catch (e) {}
+  chrome.action.setBadgeText({ text });
+  if (color) chrome.action.setBadgeBackgroundColor({ color });
 }
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+function sleep(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
 }

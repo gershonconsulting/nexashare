@@ -1,30 +1,55 @@
-name: Deploy static site to Hostinger
+name: Deploy NexaShare to Cloudflare
 
+# Keep production deployment manual until nexashare.com is an active Cloudflare
+# zone and the production environment/secrets described in DEPLOYMENT.md exist.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: nexashare-production
+  cancel-in-progress: false
+
 jobs:
-  deploy:
+  validate:
+    name: Validate Worker and extension
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Deploy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      - name: Use Node.js
+        uses: actions/setup-node@v4
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            **/.github/**
-            **/README.md
-            **/.env*
-            **/chrome-extension/**
+          node-version: "22"
 
+      - name: Run Worker smoke checks
+        run: node tests/worker-smoke.mjs
+
+      - name: Validate JavaScript and Chrome manifest
+        run: |
+          node --check src/index.js
+          node --check chrome-extension/sync-core.js
+          node --check chrome-extension/content.js
+          node --check chrome-extension/popup.js
+          node -e "JSON.parse(require('fs').readFileSync('chrome-extension/manifest.json', 'utf8'))"
+
+  deploy:
+    name: Migrate D1 and deploy complete application
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Apply D1 migrations and deploy Worker with assets
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          preCommands: wrangler d1 migrations apply nexashare-db --remote
+          command: deploy

@@ -1,5 +1,9 @@
 # NexaShare - Enhanced Version Summary
 
+> Historical proposal only. The current secure MVP is manual, browser-based,
+> and records success only after LinkedIn visibly confirms the repost. It does
+> not use LinkedIn posting permission or a posting API.
+
 ## 🎉 What's New
 
 I've added powerful new features to NexaShare specifically designed for your use case with SelectUSA and other companies!

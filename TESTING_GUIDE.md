@@ -1,5 +1,9 @@
 # Sandbox Testing Guide
 
+> Historical sandbox guide. The current production MVP does not request
+> LinkedIn posting permission or call a LinkedIn posting API. Use the
+> user-initiated Chrome extension and verify confirmed/failed outcomes.
+
 ## 🎯 Goal
 Test all NexaShare features safely before deploying to production.
 
@@ -20,7 +24,6 @@ Test all NexaShare features safely before deploying to production.
    - ✅ openid
    - ✅ profile
    - ✅ email
-   - ✅ w_member_social
 
 6. **Copy your Client Secret:**
    - You'll need this for the .env.local file

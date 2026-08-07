@@ -1,5 +1,10 @@
 # NexaShare - Application Overview
 
+> Historical design document. It does not describe the current secure MVP.
+> The current release uses Cloudflare Worker + D1 + assets and a user-initiated
+> Chrome extension that operates LinkedIn's visible UI. It does not request
+> posting permission or call LinkedIn's posting API. See `DEPLOYMENT.md`.
+
 ## Executive Summary
 
 NexaShare is a B2B influencer amplification platform designed to help companies increase their LinkedIn content reach through strategic reposting. The platform enables users to connect their LinkedIn accounts, monitor company pages, and share (repost) content from those company pages to their personal LinkedIn feeds.

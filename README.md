@@ -1,4 +1,8 @@
-# NexaShare Sandbox Environment
+# NexaShare
+
+> Current production architecture: Cloudflare Worker + D1 + Worker assets.
+> Reposting uses LinkedIn's visible browser UI through the user-initiated
+> Chrome extension. See [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## 🎯 Purpose
 This is a safe testing environment where we can:
@@ -139,9 +143,8 @@ VITE_STRIPE_PUBLIC_KEY=pk_test_your_test_key
    - openid
    - profile
    - email
-   - w_member_social
 
-**Note:** Keep production redirect (`https://nexashare.com/auth/callback`) - you can have multiple redirect URIs!
+**Production redirect:** `https://nexashare.com/api/auth/callback`
 
 ## 🧪 Testing Checklist
 
