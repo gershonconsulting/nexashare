@@ -200,12 +200,23 @@ async function handleAPI(request, env) {
     if (Number.isNaN(createdAt.getTime())) createdAt = new Date();
     const trialEndsAt = new Date(createdAt.getTime() + 30 * 86400000);
     const daysRemaining = Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / 86400000));
+    const firstConfirmed = user.team_id ? await env.DB.prepare(
+      `SELECT MIN(COALESCE(confirmed_at, created_at)) AS first_confirmed_at
+       FROM reposts WHERE team_id = ? AND status = 'confirmed'`
+    ).bind(user.team_id).first() : null;
+    const hasConfirmedRepost = !!firstConfirmed?.first_confirmed_at;
+    const displayStatus = daysRemaining > 0
+      ? 'trial'
+      : (hasConfirmedRepost ? 'trial_complete_unverified' : 'trial_extended_until_first_confirmed_repost');
     return jsonResponse({
-      display_status: daysRemaining > 0 ? 'trial' : 'trial_ended_unverified',
+      display_status: displayStatus,
       trial_days: 30,
       trial_started_at: createdAt.toISOString(),
       trial_ends_at: trialEndsAt.toISOString(),
       days_remaining: daysRemaining,
+      has_confirmed_repost: hasConfirmedRepost,
+      first_confirmed_repost_at: firstConfirmed?.first_confirmed_at || null,
+      extension_policy: 'After day 30, free access continues until the first LinkedIn-confirmed repost. Failed, skipped, and unverified attempts do not end the extension.',
       checkout_url: STRIPE_CHECKOUT_URL,
       enforcement: 'not_configured',
       note: 'Checkout completion and subscription activation are not verified until Stripe webhooks and entitlement storage are configured.'
