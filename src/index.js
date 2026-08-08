@@ -5,6 +5,7 @@ const LINKEDIN_SCOPES = 'openid profile email';
 const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00';
 const SETUP_REMINDER_TYPE = 'missing_company_after_connection';
 const SETUP_REMINDER_FROM = 'NexaShare <hello@nexashare.com>';
+const DAILY_REPORT_TYPE = 'daily_repost_report';
 
 function jsonResponse(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
@@ -100,6 +101,54 @@ async function sendMissingCompanyReminders(env) {
     }
   }
   return { sent, eligible: (eligible.results || []).length };
+}
+
+function buildDailyRepostReport(user, rows) {
+  const confirmed = rows.filter(row => row.status === 'confirmed');
+  const failed = rows.filter(row => row.status === 'failed');
+  const skipped = rows.filter(row => row.status === 'skipped' || row.status === 'already_reposted');
+  const firstName = String(user.name || '').trim().split(/\s+/)[0] || 'there';
+  const dashboardUrl = `${APP_ORIGIN}/dashboard.html#reposts`;
+  const summary = `${confirmed.length} confirmed, ${failed.length} failed, and ${skipped.length} skipped in the last 24 hours.`;
+  const itemHtml = rows.length ? rows.slice(0, 20).map(row => `<tr><td style="padding:10px;border-bottom:1px solid #e5e7eb">${escapeHtml(row.company_name || 'Company')}</td><td style="padding:10px;border-bottom:1px solid #e5e7eb">${escapeHtml(row.status.replaceAll('_', ' '))}</td><td style="padding:10px;border-bottom:1px solid #e5e7eb"><a href="${escapeHtml(row.original_post_url)}">Original</a>${row.repost_url ? ` · <a href="${escapeHtml(row.repost_url)}">Repost</a>` : ''}</td></tr>`).join('') : '<tr><td colspan="3" style="padding:18px;color:#667085">No repost outcomes were recorded in the last 24 hours.</td></tr>';
+  return {
+    to: user.email,
+    from: SETUP_REMINDER_FROM,
+    subject: `NexaShare daily report: ${confirmed.length} confirmed repost${confirmed.length === 1 ? '' : 's'}`,
+    text: `Hi ${firstName},\n\n${summary}\n\nReview every original post, repost link, and outcome: ${dashboardUrl}`,
+    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:680px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:#0a66c2;color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare daily report</div><div style="margin-top:7px">${escapeHtml(summary)}</div></td></tr><tr><td style="padding:26px"><p>Hi ${escapeHtml(firstName)},</p><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:10px;background:#f8fafc">Company</th><th align="left" style="padding:10px;background:#f8fafc">Outcome</th><th align="left" style="padding:10px;background:#f8fafc">Links</th></tr></thead><tbody>${itemHtml}</tbody></table><p style="text-align:center;margin:26px 0 4px"><a href="${dashboardUrl}" style="display:inline-block;background:#0a66c2;color:#fff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:9px">Review repost history</a></p><p style="font-size:12px;color:#667085">Only LinkedIn-confirmed reposts are counted as successful.</p></td></tr></table></td></tr></table></body></html>`
+  };
+}
+
+async function sendDailyRepostReports(env) {
+  if (!env.EMAIL) return { sent: 0, skipped: 'email_not_configured' };
+  const users = await env.DB.prepare(
+    `SELECT DISTINCT u.id, u.email, u.name, u.team_id FROM users u
+     JOIN companies c ON c.team_id = u.team_id
+     JOIN extension_tokens et ON et.user_id = u.id AND et.revoked_at IS NULL
+     WHERE u.email IS NOT NULL AND trim(u.email) <> ''
+       AND NOT EXISTS (SELECT 1 FROM daily_reports d WHERE d.user_id = u.id AND d.report_date = date('now'))
+     ORDER BY u.id LIMIT 500`
+  ).all();
+  let sent = 0;
+  for (const user of users.results || []) {
+    const outcomes = await env.DB.prepare(
+      `SELECT company_name, original_post_url, repost_url, post_text, status, attempted_at
+       FROM reposts WHERE user_id = ? AND datetime(attempted_at) >= datetime('now', '-1 day')
+       ORDER BY datetime(attempted_at) DESC LIMIT 100`
+    ).bind(user.id).all();
+    try {
+      const result = await env.EMAIL.send(buildDailyRepostReport(user, outcomes.results || []));
+      await env.DB.prepare(
+        `INSERT INTO daily_reports (user_id, report_date, status, outcome_count, provider_message_id, sent_at)
+         VALUES (?, date('now'), 'sent', ?, ?, datetime('now'))`
+      ).bind(user.id, (outcomes.results || []).length, result?.messageId || null).run();
+      sent++;
+    } catch (error) {
+      console.error('Daily report failed', { userId: user.id, message: error?.message });
+    }
+  }
+  return { sent, eligible: (users.results || []).length };
 }
 
 async function handleAuth(request, env) {
@@ -412,6 +461,6 @@ export default {
     return env.ASSETS.fetch(request);
   },
   async scheduled(_event, env, ctx) {
-    ctx.waitUntil(sendMissingCompanyReminders(env));
+    ctx.waitUntil(Promise.all([sendMissingCompanyReminders(env), sendDailyRepostReports(env)]));
   }
 };
