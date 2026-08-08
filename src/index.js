@@ -357,10 +357,12 @@ async function handleAPI(request, env) {
       if (!postUrl.startsWith('https://www.linkedin.com/')) continue;
       await env.DB.prepare(
         `INSERT INTO reposts
-         (user_id, team_id, original_post_url, post_text, status, company_name, detail, attempted_at, confirmed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (user_id, team_id, original_post_url, repost_url, post_text, status, company_name, detail, attempted_at, confirmed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
-        user.id, user.team_id, postUrl, String(outcome.postTextSnippet || '').slice(0, 500),
+        user.id, user.team_id, postUrl,
+        typeof outcome.repostUrl === 'string' && outcome.repostUrl.startsWith('https://www.linkedin.com/') ? outcome.repostUrl.slice(0, 1000) : null,
+        String(outcome.postTextSnippet || '').slice(0, 500),
         status, String(outcome.companyName || '').slice(0, 100), String(outcome.detail || '').slice(0, 500),
         outcome.attemptedAt || new Date().toISOString(), status === 'confirmed' ? (outcome.confirmedAt || new Date().toISOString()) : null
       ).run();
