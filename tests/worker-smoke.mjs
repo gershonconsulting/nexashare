@@ -50,7 +50,10 @@ assert.equal(healthBody.setup_reminder_email, 'not_configured');
 
 let scheduledPromise;
 worker.scheduled({}, env, { waitUntil(promise) { scheduledPromise = promise; } });
-assert.deepEqual(await scheduledPromise, { sent: 0, skipped: 'email_not_configured' });
+assert.deepEqual(await scheduledPromise, [
+  { sent: 0, skipped: 'email_not_configured' },
+  { sent: 0, skipped: 'email_not_configured' }
+]);
 
 let oauthStateValues;
 const authStartEnv = {
@@ -82,6 +85,7 @@ const loginSource = await readFile(new URL('../public/login.html', import.meta.u
 const registerSource = await readFile(new URL('../public/register.html', import.meta.url), 'utf8');
 const reminderMigration = await readFile(new URL('../migrations/0002_setup_reminders.sql', import.meta.url), 'utf8');
 const repostLinksMigration = await readFile(new URL('../migrations/0003_repost_links.sql', import.meta.url), 'utf8');
+const dailyReportsMigration = await readFile(new URL('../migrations/0004_daily_reports.sql', import.meta.url), 'utf8');
 assert.match(workerSource, /openid profile email/);
 assert.doesNotMatch(workerSource, /w_member_social|ugcPosts|\/v2\/shares/);
 assert.match(workerSource, /UPDATE companies SET enabled/);
@@ -108,6 +112,9 @@ assert.match(extensionSource, /company:name-resolved/);
 assert.match(extensionSource, /extractCompanyPageFromDOM/);
 assert.match(extensionSource, /findConfirmedRepostUrl/);
 assert.match(repostLinksMigration, /ADD COLUMN repost_url/);
+assert.match(dailyReportsMigration, /UNIQUE\(user_id, report_date\)/);
+assert.match(workerSource, /sendDailyRepostReports/);
+assert.match(workerSource, /Only LinkedIn-confirmed reposts are counted as successful/);
 assert.equal(manifest.version, '1.2.5');
 assert.equal(manifest.icons['128'], 'icons/icon128.png');
 assert.equal(manifest.action.default_icon['32'], 'icons/icon32.png');
