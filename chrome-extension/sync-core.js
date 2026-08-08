@@ -87,14 +87,6 @@ async function runFullSync({ trigger = 'manual' } = {}) {
   await log('info', 'run:start', { trigger });
   setBadge('…', '#6b7280');
 
-  if (!(await hasLinkedInSession())) {
-    await log('warn', 'Automatic reposting is waiting for an open, signed-in LinkedIn tab.', { trigger });
-    setBadge('!', '#dc2626');
-    const waiting = { status: 'not-logged-in', trigger, ts: new Date().toISOString() };
-    await chrome.storage.local.set({ lastSyncResult: waiting });
-    return waiting;
-  }
-
   let companies;
   try {
     const data = await authenticatedFetch('/api/companies');
@@ -110,6 +102,14 @@ async function runFullSync({ trigger = 'manual' } = {}) {
     await log('warn', 'No companies configured. Add one in the NexaShare dashboard.');
     setBadge('!', '#f59e0b');
     return { status: 'no-companies' };
+  }
+
+  if (!(await ensureLinkedInSession())) {
+    await log('warn', 'LinkedIn sign-in is required. NexaShare opened LinkedIn automatically, but no signed-in session was detected.', { trigger });
+    setBadge('!', '#dc2626');
+    const waiting = { status: 'not-logged-in', trigger, ts: new Date().toISOString() };
+    await chrome.storage.local.set({ lastSyncResult: waiting });
+    return waiting;
   }
 
   const pendingStore = await chrome.storage.local.get('pendingOutcomes');
@@ -214,6 +214,17 @@ async function hasLinkedInSession() {
     } catch (error) {}
   }
   return false;
+}
+
+async function ensureLinkedInSession() {
+  if (await hasLinkedInSession()) return true;
+  return withBackgroundTab('https://www.linkedin.com/feed/', async tabId => {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => !!document.querySelector('#global-nav, .global-nav__me, a[href*="/in/"]') && !/\/login|\/checkpoint/.test(location.pathname)
+    });
+    return !!results?.[0]?.result;
+  });
 }
 
 async function scrapeCompanyPosts(company) {
@@ -330,7 +341,7 @@ async function clickAndConfirmRepost() {
 }
 
 async function withBackgroundTab(url, operation) {
-  const tab = await chrome.tabs.create({ url, active: true });
+  const tab = await chrome.tabs.create({ url, active: false });
   try {
     await sleep(PAGE_LOAD_MS);
     return await operation(tab.id);

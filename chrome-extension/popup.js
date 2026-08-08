@@ -123,7 +123,7 @@ document.getElementById('sync-now').addEventListener('click', function (e) {
 
     var r = response.result || {};
     if (r.status === 'not-logged-in') {
-      show('Open a LinkedIn tab first, then try again.', 'err');
+      show('LinkedIn sign-in is required. NexaShare opened LinkedIn automatically, but Chrome is not signed in.', 'err');
     } else if (r.status === 'no-companies') {
       show('No companies configured. Open the dashboard to add one.', 'err');
     } else if (r.status === 'not-connected') {
