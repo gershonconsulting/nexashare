@@ -150,7 +150,7 @@ async function runFullSync({ trigger = 'manual' } = {}) {
         candidateHandled = true;
         try {
           const result = await repostContent(post);
-          outcomes.push(makeOutcome(company, post, result.confirmed ? 'confirmed' : 'failed', result.detail));
+          outcomes.push(makeOutcome(company, post, result.confirmed ? 'confirmed' : 'failed', result.detail, result.repostUrl));
           if (result.confirmed) rememberPost(seen, post.id);
         } catch (error) {
           outcomes.push(makeOutcome(company, post, 'failed', String(error)));
@@ -230,12 +230,12 @@ async function scrapeCompanyPosts(company) {
 
 function extractCompanyPageFromDOM() {
   const posts = [];
-  document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], .occludable-update').forEach(item => {
+  document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], .occludable-update, [data-view-name="feed-full-update"]').forEach(item => {
     const text = item.querySelector('.feed-shared-text, .update-components-text, [data-test-id="main-feed-activity-card__commentary"]')?.textContent?.trim() || '';
-    const link = item.querySelector('a[href*="/feed/update/"]');
-    const match = (item.getAttribute('data-urn') || '').match(/activity:(\d+)/) || link?.href?.match(/activity:(\d+)/);
+    const link = item.querySelector('a[href*="/feed/update/"], a[href*="/posts/"]');
+    const match = (item.getAttribute('data-urn') || '').match(/activity:(\d+)/) || link?.href?.match(/activity(?::|-)(\d+)/);
     if (!text && !match) return;
-    const button = item.querySelector('button[aria-label*="Repost"], button[aria-label*="repost"]');
+    const button = item.querySelector('button[aria-label*="Repost"], button[aria-label*="repost"], button[data-view-name*="repost"]');
     posts.push({
       id: match?.[1] || `post-${posts.length}`,
       url: match ? `https://www.linkedin.com/feed/update/urn:li:activity:${match[1]}/` : '',
@@ -259,9 +259,44 @@ async function repostContent(post) {
   return withBackgroundTab(post.url, async tabId => {
     const results = await chrome.scripting.executeScript({ target: { tabId }, func: clickAndConfirmRepost });
     const result = results?.[0]?.result || { confirmed: false, detail: 'LinkedIn did not return an outcome.' };
+    if (result.confirmed) {
+      try {
+        result.repostUrl = await findConfirmedRepostUrl(post.id);
+        if (!result.repostUrl) result.detail += ' The repost link was not exposed by LinkedIn and was not recorded.';
+      } catch (error) {
+        result.detail += ' The repost was confirmed, but its separate link could not be captured.';
+      }
+    }
     await log(result.confirmed ? 'info' : 'warn', result.confirmed ? 'repost:confirmed' : 'repost:not-confirmed', { postId: post.id, detail: result.detail });
     return result;
   });
+}
+
+async function findConfirmedRepostUrl(originalPostId) {
+  if (!originalPostId) return '';
+  return withBackgroundTab('https://www.linkedin.com/in/me/recent-activity/reposts/', async tabId => {
+    await chrome.scripting.executeScript({ target: { tabId }, func: () => window.scrollBy(0, 800) });
+    await sleep(SCROLL_DELAY_MS);
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: findRepostActivityInDOM,
+      args: [String(originalPostId)]
+    });
+    return results?.[0]?.result || '';
+  });
+}
+
+function findRepostActivityInDOM(originalPostId) {
+  const cards = document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], .occludable-update');
+  for (const card of cards) {
+    const evidence = `${card.getAttribute('data-urn') || ''} ${card.innerHTML}`;
+    if (!evidence.includes(originalPostId)) continue;
+    const activityMatch = (card.getAttribute('data-urn') || '').match(/activity:(\d+)/);
+    if (activityMatch && activityMatch[1] !== originalPostId) {
+      return `https://www.linkedin.com/feed/update/urn:li:activity:${activityMatch[1]}/`;
+    }
+  }
+  return '';
 }
 
 async function clickAndConfirmRepost() {
@@ -304,11 +339,12 @@ async function withBackgroundTab(url, operation) {
   }
 }
 
-function makeOutcome(company, post, status, detail) {
+function makeOutcome(company, post, status, detail, repostUrl = '') {
   const timestamp = new Date().toISOString();
   return {
     companyName: company.name,
     postUrl: post.url,
+    repostUrl: repostUrl || '',
     postTextSnippet: (post.text || '').slice(0, 500),
     status,
     detail,
