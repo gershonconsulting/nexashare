@@ -3,6 +3,8 @@ const APP_ORIGIN = 'https://nexashare.com';
 const LINKEDIN_REDIRECT_URI = `${APP_ORIGIN}/api/auth/callback`;
 const LINKEDIN_SCOPES = 'openid profile email';
 const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00';
+const SETUP_REMINDER_TYPE = 'missing_company_after_connection';
+const SETUP_REMINDER_FROM = 'NexaShare <hello@nexashare.com>';
 
 function jsonResponse(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
@@ -40,15 +42,74 @@ function validCompanyVanity(value) {
   return typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(value);
 }
 
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  })[character]);
+}
+
+function buildMissingCompanyReminder(user) {
+  const rawFirstName = String(user.name || '').trim().split(/\s+/)[0] || 'there';
+  const firstName = escapeHtml(rawFirstName);
+  const setupUrl = `${APP_ORIGIN}/onboarding.html`;
+  return {
+    to: user.email,
+    from: SETUP_REMINDER_FROM,
+    subject: 'NexaShare is connected — add your first company',
+    text: `Hi ${rawFirstName},\n\nNexaShare is connected, but it does not yet have a company to monitor for LinkedIn posts. Add the LinkedIn company page for your employer, partner, or client to finish setup.\n\nFinish setup: ${setupUrl}\n\nNexaShare will not attempt a repost until you add a company. This is a one-time setup reminder.`,
+    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#12243a"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:36px 16px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 12px 35px rgba(15,52,86,.12)"><tr><td style="background:linear-gradient(135deg,#075985,#0ea5e9);padding:30px;color:#fff"><div style="font-size:26px;font-weight:800">NexaShare</div><div style="margin-top:8px;font-size:16px;opacity:.92">Your connection is ready.</div></td></tr><tr><td style="padding:34px"><h1 style="font-size:26px;line-height:1.25;margin:0 0 16px">One small step, ${firstName}</h1><p style="font-size:17px;line-height:1.6;margin:0 0 18px">NexaShare is connected, but it does not yet have a company to monitor for LinkedIn posts.</p><div style="background:#eff8ff;border:1px solid #bae6fd;border-radius:12px;padding:18px;margin:22px 0"><strong>Add the LinkedIn company page</strong><br><span style="color:#40566e;line-height:1.6">Choose your employer, a partner, or a client whose content you want to repost.</span></div><p style="text-align:center;margin:28px 0"><a href="${setupUrl}" style="display:inline-block;background:#0b78b9;color:#fff;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:10px">Finish my setup</a></p><p style="font-size:14px;line-height:1.55;color:#60758a;margin:0">NexaShare will not attempt a repost until you add a company. This is a one-time setup reminder.</p></td></tr></table></td></tr></table></body></html>`
+  };
+}
+
+async function sendMissingCompanyReminders(env) {
+  if (!env.EMAIL) {
+    console.log('Setup reminders skipped: EMAIL binding is not configured.');
+    return { sent: 0, skipped: 'email_not_configured' };
+  }
+  const eligible = await env.DB.prepare(
+    `SELECT u.id, u.email, u.name FROM users u
+     WHERE u.team_id IS NOT NULL AND u.email IS NOT NULL AND trim(u.email) <> ''
+       AND datetime(u.created_at) <= datetime('now', '-1 day')
+       AND EXISTS (SELECT 1 FROM extension_tokens et WHERE et.user_id = u.id AND et.revoked_at IS NULL)
+       AND NOT EXISTS (SELECT 1 FROM companies c WHERE c.team_id = u.team_id)
+       AND NOT EXISTS (
+         SELECT 1 FROM setup_reminders sr WHERE sr.user_id = u.id AND sr.reminder_type = ?
+           AND (sr.status = 'sent' OR sr.attempt_count >= 3 OR sr.attempted_at > datetime('now', '-1 day'))
+       ) ORDER BY u.created_at ASC LIMIT 100`
+  ).bind(SETUP_REMINDER_TYPE).all();
+  let sent = 0;
+  for (const user of eligible.results || []) {
+    await env.DB.prepare(
+      `INSERT INTO setup_reminders (user_id, reminder_type, status, attempt_count, attempted_at, updated_at)
+       VALUES (?, ?, 'sending', 1, datetime('now'), datetime('now'))
+       ON CONFLICT(user_id, reminder_type) DO UPDATE SET status = 'sending',
+         attempt_count = attempt_count + 1, attempted_at = datetime('now'), updated_at = datetime('now'), error = NULL`
+    ).bind(user.id, SETUP_REMINDER_TYPE).run();
+    try {
+      const result = await env.EMAIL.send(buildMissingCompanyReminder(user));
+      await env.DB.prepare(
+        `UPDATE setup_reminders SET status = 'sent', sent_at = datetime('now'), provider_message_id = ?, updated_at = datetime('now'), error = NULL
+         WHERE user_id = ? AND reminder_type = ?`
+      ).bind(result?.messageId || null, user.id, SETUP_REMINDER_TYPE).run();
+      sent++;
+    } catch (error) {
+      await env.DB.prepare(
+        `UPDATE setup_reminders SET status = 'failed', error = ?, updated_at = datetime('now') WHERE user_id = ? AND reminder_type = ?`
+      ).bind(String(error?.message || 'Email provider rejected the send').slice(0, 500), user.id, SETUP_REMINDER_TYPE).run();
+      console.error('Setup reminder failed', { userId: user.id, code: error?.code, message: error?.message });
+    }
+  }
+  return { sent, eligible: (eligible.results || []).length };
+}
+
 async function handleAuth(request, env) {
   const url = new URL(request.url);
 
   if (url.pathname === '/api/auth/linkedin') {
-    const teamName = (url.searchParams.get('team') || '').trim().slice(0, 100);
     const state = randomToken();
     await env.DB.prepare(
       "INSERT INTO oauth_states (state_hash, team_name, expires_at) VALUES (?, ?, datetime('now', '+10 minutes'))"
-    ).bind(await sha256(state), teamName).run();
+    ).bind(await sha256(state), '').run();
     const linkedinUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${LINKEDIN_CLIENT_ID}&redirect_uri=${encodeURIComponent(LINKEDIN_REDIRECT_URI)}&scope=${encodeURIComponent(LINKEDIN_SCOPES)}&state=${encodeURIComponent(state)}`;
     return Response.redirect(linkedinUrl, 302);
   }
@@ -63,7 +124,7 @@ async function handleAuth(request, env) {
 
     const stateHash = await sha256(state);
     const stateRow = await env.DB.prepare(
-      "SELECT team_name FROM oauth_states WHERE state_hash = ? AND used_at IS NULL AND expires_at > datetime('now')"
+      "SELECT 1 AS valid FROM oauth_states WHERE state_hash = ? AND used_at IS NULL AND expires_at > datetime('now')"
     ).bind(stateHash).first();
     if (!stateRow) return Response.redirect(`${APP_ORIGIN}/login.html?error=invalid_state`, 302);
     await env.DB.prepare("UPDATE oauth_states SET used_at = datetime('now') WHERE state_hash = ?").bind(stateHash).run();
@@ -89,22 +150,17 @@ async function handleAuth(request, env) {
       if (!profileRes.ok) return Response.redirect(`${APP_ORIGIN}/login.html?error=profile_failed`, 302);
       const profile = await profileRes.json();
 
-      let teamId = null;
-      if (stateRow.team_name) {
-        const existingTeam = await env.DB.prepare('SELECT id FROM teams WHERE name = ?').bind(stateRow.team_name).first();
-        if (existingTeam) {
-          teamId = existingTeam.id;
-        } else {
-          const result = await env.DB.prepare('INSERT INTO teams (name) VALUES (?)').bind(stateRow.team_name).run();
-          teamId = result.meta.last_row_id;
-        }
-      }
-
       const existingUser = await env.DB.prepare('SELECT id, team_id FROM users WHERE linkedin_id = ?').bind(profile.sub).first();
+      let teamId = existingUser?.team_id || null;
+      if (!teamId) {
+        const accountName = `${profile.name || profile.email || 'My'} account`.trim().slice(0, 100);
+        const teamResult = await env.DB.prepare('INSERT INTO teams (name) VALUES (?)').bind(accountName).run();
+        teamId = teamResult.meta.last_row_id;
+      }
       let userId;
       if (existingUser) {
         userId = existingUser.id;
-        if (!existingUser.team_id && teamId) {
+        if (!existingUser.team_id) {
           await env.DB.prepare('UPDATE users SET team_id = ?, linkedin_access_token = ? WHERE id = ?').bind(teamId, tokenData.access_token, userId).run();
         } else {
           await env.DB.prepare('UPDATE users SET linkedin_access_token = ? WHERE id = ?').bind(tokenData.access_token, userId).run();
@@ -112,7 +168,7 @@ async function handleAuth(request, env) {
       } else {
         const result = await env.DB.prepare(
           'INSERT INTO users (email, name, linkedin_id, linkedin_access_token, team_id, role) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(profile.email || '', profile.name || '', profile.sub, tokenData.access_token, teamId, teamId ? 'admin' : 'member').run();
+        ).bind(profile.email || '', profile.name || '', profile.sub, tokenData.access_token, teamId, 'admin').run();
         userId = result.meta.last_row_id;
       }
 
@@ -121,12 +177,10 @@ async function handleAuth(request, env) {
         "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+30 days'))"
       ).bind(await sha256(sessionToken), userId).run();
       let destination = `${APP_ORIGIN}/dashboard.html`;
-      if (teamId) {
-        const companyCount = await env.DB.prepare(
-          'SELECT COUNT(*) AS count FROM companies WHERE team_id = ?'
-        ).bind(teamId).first();
-        if (!Number(companyCount?.count || 0)) destination = `${APP_ORIGIN}/onboarding.html`;
-      }
+      const companyCount = await env.DB.prepare(
+        'SELECT COUNT(*) AS count FROM companies WHERE team_id = ?'
+      ).bind(teamId).first();
+      if (!Number(companyCount?.count || 0)) destination = `${APP_ORIGIN}/onboarding.html`;
       return new Response(null, {
         status: 302,
         headers: {
@@ -174,6 +228,7 @@ async function handleAPI(request, env) {
       return jsonResponse({
         status: 'ready',
         database: 'connected',
+        setup_reminder_email: env.EMAIL ? 'configured' : 'not_configured',
         canonical_origin: APP_ORIGIN,
         checked_at: new Date().toISOString()
       });
@@ -181,6 +236,7 @@ async function handleAPI(request, env) {
       return jsonResponse({
         status: 'degraded',
         database: 'unavailable',
+        setup_reminder_email: env.EMAIL ? 'configured' : 'not_configured',
         canonical_origin: APP_ORIGIN,
         checked_at: new Date().toISOString()
       }, 503);
@@ -322,13 +378,6 @@ async function handleAPI(request, env) {
     return jsonResponse({ reposts: reposts.results });
   }
 
-  if (url.pathname === '/api/team/invite' && request.method === 'GET') {
-    const user = await getUser(request, env);
-    if (!user || user.role !== 'admin') return jsonResponse({ error: 'Admin only' }, 403);
-    const team = await env.DB.prepare('SELECT name FROM teams WHERE id = ?').bind(user.team_id).first();
-    return jsonResponse({ inviteUrl: `${url.origin}/register.html?team=${encodeURIComponent(team.name)}` });
-  }
-
   if (url.pathname === '/api/auth/logout') {
     const session = getCookie(request, 'session');
     if (session) await env.DB.prepare("UPDATE sessions SET revoked_at = datetime('now') WHERE token_hash = ?").bind(await sha256(session)).run();
@@ -359,5 +408,8 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
     if (url.pathname.startsWith('/api/')) return handleAPI(request, env);
     return env.ASSETS.fetch(request);
+  },
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(sendMissingCompanyReminders(env));
   }
 };
