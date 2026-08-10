@@ -311,19 +311,23 @@ function findRepostActivityInDOM(originalPostId) {
 }
 
 async function clickAndConfirmRepost() {
-  const button = [...document.querySelectorAll('button')].find(item => {
+  const button = [...document.querySelectorAll('button, [role="button"], [data-view-name*="repost"]')].find(item => {
     const label = (item.getAttribute('aria-label') || '').toLowerCase();
-    return label.includes('repost') || item.textContent.toLowerCase().includes('repost');
+    const viewName = (item.getAttribute('data-view-name') || '').toLowerCase();
+    return label.includes('repost') || viewName.includes('repost') || item.textContent.toLowerCase().trim() === 'repost';
   });
   if (!button) return { confirmed: false, detail: 'Repost button was not found in the visible LinkedIn UI.' };
   if (button.getAttribute('aria-pressed') === 'true') return { confirmed: false, detail: 'Post was already reposted.' };
   button.click();
   await new Promise(resolve => setTimeout(resolve, 1500));
-  const action = [...document.querySelectorAll('[role="menuitem"], .artdeco-dropdown__item, .social-reshare-button')].find(item => {
-    const text = item.textContent.toLowerCase();
-    return text.includes('repost') && !text.includes('with your thoughts') && !text.includes('quote');
+  const action = [...document.querySelectorAll('button, [role="button"], [role="menuitem"], [data-view-name*="repost"], .artdeco-dropdown__item, .social-reshare-button')].find(item => {
+    const text = item.textContent.toLowerCase().replace(/\s+/g, ' ').trim();
+    const label = (item.getAttribute('aria-label') || '').toLowerCase();
+    const viewName = (item.getAttribute('data-view-name') || '').toLowerCase();
+    const directRepost = /^repost\b/.test(text) || label.includes('repost') || viewName.includes('repost') || viewName.includes('reshare');
+    return directRepost && !text.includes('with your thoughts') && !text.includes('quote') && item !== button;
   });
-  if (!action) return { confirmed: false, detail: 'LinkedIn did not show a direct repost action.' };
+  if (!action) return { confirmed: false, detail: 'NexaShare opened the repost menu but could not identify LinkedIn\'s direct Repost choice in the current page layout.' };
   action.click();
   for (let attempt = 0; attempt < 8; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 500));
