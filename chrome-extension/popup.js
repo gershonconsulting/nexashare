@@ -127,7 +127,8 @@ document.getElementById('sync-now').addEventListener('click', function (e) {
     } else if (r.status === 'no-companies') {
       show('No companies configured. Open the dashboard to add one.', 'err');
     } else if (r.status === 'not-connected') {
-      show('Connect this extension from the NexaShare dashboard first.', 'err');
+      chrome.tabs.create({ url: 'https://nexashare.com/dashboard.html#settings' });
+      show('NexaShare opened the dashboard to connect this extension automatically. If asked, sign in once.', 'info');
     } else if (r.status === 'reporting-failed') {
       show('Run finished, but outcomes could not be saved. Reconnect from the dashboard.', 'err');
     } else if (r.status === 'paused') {
