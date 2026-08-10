@@ -1,14 +1,14 @@
 # NexaShare private Chrome extension
 
-Current testing version: **1.2.6**
+Current testing version: **1.2.7**
 
 This extension is private and intended only for local, unpacked testing. It is
 not configured for browser-store publication.
 
 ## First installation
 
-1. Download `nexashare-extension-1.2.6.zip` from the NexaShare dashboard.
-2. Extract it into a dedicated folder such as `NexaShare-extension-1.2.6`.
+1. Download `nexashare-extension-1.2.7.zip` from the NexaShare dashboard.
+2. Extract it into a dedicated folder such as `NexaShare-extension-1.2.7`.
 3. Confirm `manifest.json` is directly inside the extracted folder.
 4. Open `chrome://extensions` in Chrome.
 5. Enable **Developer mode**.
@@ -24,7 +24,7 @@ The website cannot install or update a Chrome extension automatically.
 2. Download the newest ZIP.
 3. Replace the files in the same unpacked extension folder.
 4. Open `chrome://extensions` and choose **Reload** for NexaShare.
-5. Confirm the popup and dashboard both show version **1.2.6**.
+5. Confirm the popup and dashboard both show version **1.2.7**.
 6. Refresh the dashboard and reconnect only if it reports disconnected.
 
 ## Automatic testing behavior
