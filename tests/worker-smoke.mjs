@@ -99,7 +99,7 @@ assert.match(workerSource, /destination = `\$\{APP_ORIGIN\}\/onboarding\.html`/)
 assert.doesNotMatch(workerSource, /searchParams\.get\('team'\)/);
 assert.doesNotMatch(workerSource, /\/api\/team\/invite/);
 assert.match(workerSource, /INSERT INTO teams \(name\)/);
-assert.match(workerSource, /NexaShare is connected — add your first company/);
+assert.match(workerSource, /NexaShare is connected â€” add your first company/);
 assert.match(workerSource, /attempt_count >= 3/);
 assert.match(workerSource, /NOT EXISTS \(SELECT 1 FROM companies/);
 assert.match(reminderMigration, /UNIQUE\(user_id, reminder_type\)/);
@@ -123,6 +123,9 @@ assert.match(dashboardSource, /EXPECTED_EXTENSION_VERSION\s*=\s*'1\.2\.7'/);
 assert.match(dashboardSource, /data-view="summary">Summary/);
 assert.match(dashboardSource, /data-view="companies">Companies/);
 assert.match(dashboardSource, /data-view="reposts">Reposts/);
+assert.match(dashboardSource, /data-view="log">Extension Log/);
+assert.match(dashboardSource, /nexashare-ext-get-log/);
+assert.match(dashboardSource, /Chrome Extension Log/);
 assert.match(dashboardSource, /Open original post/);
 assert.match(dashboardSource, /Your repost/);
 assert.match(dashboardSource, /Company post/);
@@ -158,3 +161,4 @@ assert.match(registerSource, /location\.replace\('\/login\.html'\)/);
 assert.doesNotMatch(registerSource, /Create your team|teamName/);
 
 console.log('Worker and extension smoke checks passed.');
+
