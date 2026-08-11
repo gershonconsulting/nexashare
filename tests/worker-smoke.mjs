@@ -122,6 +122,7 @@ assert.ok(manifest.permissions.includes('alarms'));
 assert.match(dashboardSource, /EXPECTED_EXTENSION_VERSION\s*=\s*'1\.2\.7'/);
 assert.match(dashboardSource, /data-view="summary">Summary/);
 assert.match(dashboardSource, /data-view="companies">Companies/);
+assert.match(dashboardSource, /data-view="repost-now">Repost now/);
 assert.match(dashboardSource, /data-view="reposts">Reposts/);
 assert.match(dashboardSource, /data-view="log">Extension Log/);
 assert.match(dashboardSource, /nexashare-ext-get-log/);
@@ -132,6 +133,8 @@ assert.match(dashboardSource, /Company post/);
 assert.match(dashboardSource, /Post text/);
 assert.match(dashboardSource, /r\.post_text/);
 assert.match(dashboardSource, /Run test now/);
+assert.match(dashboardSource, /id="repostNow"/);
+assert.match(dashboardSource, /runRepostCheck/);
 assert.match(dashboardSource, /id="extensionUpdateBanner"/);
 assert.match(dashboardSource, /nexashare-extension-1\.2\.7\.zip/);
 assert.match(dashboardSource, /Reload instructions/);
@@ -161,4 +164,3 @@ assert.match(registerSource, /location\.replace\('\/login\.html'\)/);
 assert.doesNotMatch(registerSource, /Create your team|teamName/);
 
 console.log('Worker and extension smoke checks passed.');
-
