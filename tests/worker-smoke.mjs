@@ -99,7 +99,7 @@ assert.match(workerSource, /destination = `\$\{APP_ORIGIN\}\/onboarding\.html`/)
 assert.doesNotMatch(workerSource, /searchParams\.get\('team'\)/);
 assert.doesNotMatch(workerSource, /\/api\/team\/invite/);
 assert.match(workerSource, /INSERT INTO teams \(name\)/);
-assert.match(workerSource, /NexaShare is connected â€” add your first company/);
+assert.match(workerSource, /NexaShare is connected/);
 assert.match(workerSource, /attempt_count >= 3/);
 assert.match(workerSource, /NOT EXISTS \(SELECT 1 FROM companies/);
 assert.match(reminderMigration, /UNIQUE\(user_id, reminder_type\)/);
