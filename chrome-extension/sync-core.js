@@ -311,37 +311,47 @@ function findRepostActivityInDOM(originalPostId) {
 }
 
 async function clickAndConfirmRepost() {
-  const button = [...document.querySelectorAll('button, [role="button"], [data-view-name*="repost"]')].find(item => {
-    const label = (item.getAttribute('aria-label') || '').toLowerCase();
-    const viewName = (item.getAttribute('data-view-name') || '').toLowerCase();
-    return label.includes('repost') || viewName.includes('repost') || item.textContent.toLowerCase().trim() === 'repost';
+  const isVisible = item => {
+    const box = item?.getBoundingClientRect?.();
+    return !!box && box.width > 0 && box.height > 0 && getComputedStyle(item).visibility !== 'hidden' && getComputedStyle(item).display !== 'none';
+  };
+  const describe = item => `${item?.getAttribute?.('aria-label') || ''} ${item?.getAttribute?.('data-view-name') || ''} ${item?.textContent || ''}`.replace(/\s+/g, ' ').trim().toLowerCase();
+  const controls = () => [...document.querySelectorAll('button, [role="button"], [data-view-name*="repost"], [data-view-name*="reshare"]')].filter(isVisible);
+  const button = controls().find(item => {
+    const value = describe(item);
+    return /\brepost\b|\breshare\b/.test(value) && !/with your thoughts|quote/.test(value);
   });
-  if (!button) return { confirmed: false, detail: 'Repost button was not found in the visible LinkedIn UI.' };
-  if (button.getAttribute('aria-pressed') === 'true') return { confirmed: false, detail: 'Post was already reposted.' };
+  if (!button) return { confirmed: false, detail: 'Repost button was not found in the visible LinkedIn post.' };
+  if (button.getAttribute('aria-pressed') === 'true' || /undo repost|remove repost/.test(describe(button))) return { confirmed: false, detail: 'Post was already reposted.' };
+  const before = describe(button);
+  button.scrollIntoView({ block: 'center', inline: 'center' });
   button.click();
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  const action = [...document.querySelectorAll('button, [role="button"], [role="menuitem"], [data-view-name*="repost"], .artdeco-dropdown__item, .social-reshare-button')].find(item => {
-    const text = item.textContent.toLowerCase().replace(/\s+/g, ' ').trim();
-    const label = (item.getAttribute('aria-label') || '').toLowerCase();
-    const viewName = (item.getAttribute('data-view-name') || '').toLowerCase();
-    const directRepost = /^repost\b/.test(text) || label.includes('repost') || viewName.includes('repost') || viewName.includes('reshare');
-    return directRepost && !text.includes('with your thoughts') && !text.includes('quote') && item !== button;
-  });
-  if (!action) return { confirmed: false, detail: 'NexaShare opened the repost menu but could not identify LinkedIn\'s direct Repost choice in the current page layout.' };
-  action.click();
-  for (let attempt = 0; attempt < 8; attempt++) {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const current = [...document.querySelectorAll('button')].find(item => {
-      const label = (item.getAttribute('aria-label') || '').toLowerCase();
-      return label.includes('repost') || item.textContent.toLowerCase().includes('repost');
-    });
-    if (current && (
-      current.getAttribute('aria-pressed') === 'true' ||
-      current.classList.contains('react-button--active') ||
-      /undo repost|remove repost/i.test(current.getAttribute('aria-label') || current.textContent)
-    )) return { confirmed: true, detail: 'LinkedIn visibly changed the repost control to its active state.' };
+
+  let action;
+  for (let attempt = 0; attempt < 10 && !action; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    action = [...document.querySelectorAll('[role="menuitem"], [role="option"], button, [role="button"], .artdeco-dropdown__item, .social-reshare-button')]
+      .filter(isVisible)
+      .find(item => {
+        const value = describe(item);
+        const inMenu = !!item.closest('[role="menu"], [role="dialog"], .artdeco-dropdown, .artdeco-dropdown__content');
+        return inMenu && (/^repost\b/.test(value) || /^reshare\b/.test(value) || /data-view-name=(?:repost|reshare)/.test(value)) && !/with your thoughts|quote/.test(value);
+      });
   }
-  return { confirmed: false, detail: 'The action was clicked, but LinkedIn did not visibly confirm the repost.' };
+  if (!action) return { confirmed: false, detail: 'NexaShare opened the repost menu but could not identify LinkedIn\'s visible direct Repost choice.' };
+  action.scrollIntoView({ block: 'center', inline: 'center' });
+  action.click();
+
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const current = controls().find(item => item === button || /\brepost\b|\breshare\b/.test(describe(item)));
+    const controlChanged = current && (current.getAttribute('aria-pressed') === 'true' || current.classList.contains('react-button--active') || /undo repost|remove repost/.test(describe(current)) || (current === button && describe(current) !== before));
+    const feedback = [...document.querySelectorAll('[role="alert"], [role="status"], .artdeco-toast-item, .artdeco-inline-feedback')]
+      .filter(isVisible).map(describe).join(' ');
+    const successMessage = /reposted|repost successful|post shared|shared successfully/.test(feedback) && !/could not|error|failed/.test(feedback);
+    if (controlChanged || successMessage) return { confirmed: true, detail: controlChanged ? 'LinkedIn visibly changed the repost control to its active state.' : 'LinkedIn displayed a visible repost confirmation.' };
+  }
+  return { confirmed: false, detail: 'NexaShare selected LinkedIn\'s direct Repost choice, but LinkedIn did not provide visible confirmation.' };
 }
 
 async function withBackgroundTab(url, operation) {
