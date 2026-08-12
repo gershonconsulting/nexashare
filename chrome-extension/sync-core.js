@@ -334,7 +334,7 @@ async function clickAndConfirmRepost() {
         return inMenu && instant && !/with your thoughts|quote/.test(value);
       });
   }
-  if (!action) return { confirmed: false, detail: 'NexaShare opened the repost menu but could not identify LinkedIn\'s visible â€œRepost instantlyâ€ choice.' };
+  if (!action) return { confirmed: false, detail: "NexaShare opened the repost menu but could not identify LinkedIn's visible Repost instantly choice." };
   action.scrollIntoView({ block: 'center', inline: 'center' });
   action.click();
 
