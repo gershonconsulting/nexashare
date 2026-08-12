@@ -43,6 +43,10 @@ function validCompanyVanity(value) {
   return typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(value);
 }
 
+function validPersonVanity(value) {
+  return typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{2,99}$/.test(value);
+}
+
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, character => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
@@ -359,6 +363,54 @@ async function handleAPI(request, env) {
     return jsonResponse({ success: true }, 201);
   }
 
+  if (url.pathname === '/api/people' && request.method === 'GET') {
+    const user = await getUser(request, env) || await getExtensionUser(request, env);
+    if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const people = await env.DB.prepare(
+      'SELECT id, vanity, name, enabled, created_at FROM people WHERE team_id = ? ORDER BY created_at DESC'
+    ).bind(user.team_id).all();
+    return jsonResponse({ people: people.results });
+  }
+
+  if (url.pathname === '/api/people' && request.method === 'POST') {
+    const user = await getUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const body = await request.json();
+    const vanity = String(body.vanity || '').toLowerCase();
+    if (!validPersonVanity(vanity)) return jsonResponse({ error: 'Invalid LinkedIn personal-profile URL' }, 400);
+    const name = String(body.name || vanity.replace(/[-_]/g, ' ')).trim().slice(0, 100);
+    await env.DB.prepare(
+      `INSERT INTO people (team_id, vanity, name, enabled) VALUES (?, ?, ?, 1)
+       ON CONFLICT(team_id, vanity) DO UPDATE SET name = excluded.name, enabled = 1`
+    ).bind(user.team_id, vanity, name).run();
+    return jsonResponse({ success: true }, 201);
+  }
+
+  const personMatch = url.pathname.match(/^\/api\/people\/(\d+)$/);
+  if (personMatch && request.method === 'PATCH') {
+    const user = await getUser(request, env) || await getExtensionUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const body = await request.json();
+    let result;
+    if (typeof body.name === 'string') {
+      const name = body.name.trim().replace(/\s+/g, ' ').slice(0, 100);
+      if (name.length < 2 || /^linkedin$/i.test(name)) return jsonResponse({ error: 'Invalid person name' }, 400);
+      result = await env.DB.prepare('UPDATE people SET name = ? WHERE id = ? AND team_id = ?').bind(name, Number(personMatch[1]), user.team_id).run();
+    } else if (typeof body.enabled === 'boolean') {
+      result = await env.DB.prepare('UPDATE people SET enabled = ? WHERE id = ? AND team_id = ?').bind(body.enabled ? 1 : 0, Number(personMatch[1]), user.team_id).run();
+    } else return jsonResponse({ error: 'Provide a person name or enabled state' }, 400);
+    if (!result.meta.changes) return jsonResponse({ error: 'Person not found' }, 404);
+    return jsonResponse({ success: true, enabled: body.enabled, name: body.name });
+  }
+
+  if (personMatch && request.method === 'DELETE') {
+    const user = await getUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const result = await env.DB.prepare('DELETE FROM people WHERE id = ? AND team_id = ?').bind(Number(personMatch[1]), user.team_id).run();
+    if (!result.meta.changes) return jsonResponse({ error: 'Person not found' }, 404);
+    return jsonResponse({ success: true });
+  }
+
   const companyMatch = url.pathname.match(/^\/api\/companies\/(\d+)$/);
   if (companyMatch && request.method === 'PATCH') {
     const user = await getUser(request, env) || await getExtensionUser(request, env);
@@ -380,6 +432,14 @@ async function handleAPI(request, env) {
     }
     if (!result.meta.changes) return jsonResponse({ error: 'Company not found' }, 404);
     return jsonResponse({ success: true, enabled: body.enabled, name: body.name });
+  }
+
+  if (companyMatch && request.method === 'DELETE') {
+    const user = await getUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const result = await env.DB.prepare('DELETE FROM companies WHERE id = ? AND team_id = ?').bind(Number(companyMatch[1]), user.team_id).run();
+    if (!result.meta.changes) return jsonResponse({ error: 'Company not found' }, 404);
+    return jsonResponse({ success: true });
   }
 
   if (url.pathname === '/api/extension/token' && request.method === 'POST') {
