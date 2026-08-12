@@ -85,7 +85,7 @@ async function authenticatedFetch(path, options = {}) {
 async function runFullSync({ trigger = 'manual' } = {}) {
   await chrome.storage.local.set({ nexashareLog: [] });
   await log('info', 'run:start', { trigger });
-  setBadge('…', '#6b7280');
+  setBadge('â€¦', '#6b7280');
 
   let companies;
   try {
@@ -198,7 +198,7 @@ async function runFullSync({ trigger = 'manual' } = {}) {
   };
   await chrome.storage.local.set({ lastSyncResult: result });
   await log('info', 'run:done', result);
-  setBadge(result.totalFailed || !reported ? '!' : '✓', result.totalFailed || !reported ? '#dc2626' : '#059669');
+  setBadge(result.totalFailed || !reported ? '!' : 'âœ“', result.totalFailed || !reported ? '#dc2626' : '#059669');
   return result;
 }
 
@@ -270,13 +270,8 @@ async function repostContent(post) {
   return withBackgroundTab(post.url, async tabId => {
     const results = await chrome.scripting.executeScript({ target: { tabId }, func: clickAndConfirmRepost });
     const result = results?.[0]?.result || { confirmed: false, detail: 'LinkedIn did not return an outcome.' };
-    if (result.confirmed) {
-      try {
-        result.repostUrl = await findConfirmedRepostUrl(post.id);
-        if (!result.repostUrl) result.detail += ' The repost link was not exposed by LinkedIn and was not recorded.';
-      } catch (error) {
-        result.detail += ' The repost was confirmed, but its separate link could not be captured.';
-      }
+    if (result.confirmed && !result.repostUrl) {
+      result.detail += ' LinkedIn confirmed the repost, but did not expose a View repost link to record.';
     }
     await log(result.confirmed ? 'info' : 'warn', result.confirmed ? 'repost:confirmed' : 'repost:not-confirmed', { postId: post.id, detail: result.detail });
     return result;
@@ -335,10 +330,11 @@ async function clickAndConfirmRepost() {
       .find(item => {
         const value = describe(item);
         const inMenu = !!item.closest('[role="menu"], [role="dialog"], .artdeco-dropdown, .artdeco-dropdown__content');
-        return inMenu && (/^repost\b/.test(value) || /^reshare\b/.test(value) || /data-view-name=(?:repost|reshare)/.test(value)) && !/with your thoughts|quote/.test(value);
+        const instant = /\brepost instantly\b|\breshare instantly\b/.test(value);
+        return inMenu && instant && !/with your thoughts|quote/.test(value);
       });
   }
-  if (!action) return { confirmed: false, detail: 'NexaShare opened the repost menu but could not identify LinkedIn\'s visible direct Repost choice.' };
+  if (!action) return { confirmed: false, detail: 'NexaShare opened the repost menu but could not identify LinkedIn\'s visible â€œRepost instantlyâ€ choice.' };
   action.scrollIntoView({ block: 'center', inline: 'center' });
   action.click();
 
@@ -346,10 +342,12 @@ async function clickAndConfirmRepost() {
     await new Promise(resolve => setTimeout(resolve, 500));
     const current = controls().find(item => item === button || /\brepost\b|\breshare\b/.test(describe(item)));
     const controlChanged = current && (current.getAttribute('aria-pressed') === 'true' || current.classList.contains('react-button--active') || /undo repost|remove repost/.test(describe(current)) || (current === button && describe(current) !== before));
-    const feedback = [...document.querySelectorAll('[role="alert"], [role="status"], .artdeco-toast-item, .artdeco-inline-feedback')]
-      .filter(isVisible).map(describe).join(' ');
-    const successMessage = /reposted|repost successful|post shared|shared successfully/.test(feedback) && !/could not|error|failed/.test(feedback);
-    if (controlChanged || successMessage) return { confirmed: true, detail: controlChanged ? 'LinkedIn visibly changed the repost control to its active state.' : 'LinkedIn displayed a visible repost confirmation.' };
+    const notices = [...document.querySelectorAll('[role="alert"], [role="status"], .artdeco-toast-item, .artdeco-inline-feedback')].filter(isVisible);
+    const successNotice = notices.find(item => /repost successful|reposted|post shared|shared successfully/.test(describe(item)) && !/could not|error|failed/.test(describe(item)));
+    const viewRepost = successNotice && [...successNotice.querySelectorAll('a[href]')].find(link => /view repost|view reshare/.test(describe(link)));
+    const repostUrl = viewRepost ? new URL(viewRepost.getAttribute('href'), location.origin).href : '';
+    if (successNotice) return { confirmed: true, repostUrl, detail: repostUrl ? 'LinkedIn confirmed the repost and provided its View repost link.' : 'LinkedIn displayed a visible repost confirmation.' };
+    if (controlChanged) return { confirmed: true, detail: 'LinkedIn visibly changed the repost control to its active state.' };
   }
   return { confirmed: false, detail: 'NexaShare selected LinkedIn\'s direct Repost choice, but LinkedIn did not provide visible confirmation.' };
 }
@@ -402,3 +400,4 @@ function setBadge(text, color) {
 function sleep(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
+
