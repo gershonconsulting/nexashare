@@ -329,9 +329,11 @@ async function clickAndConfirmRepost() {
       .filter(isVisible)
       .find(item => {
         const value = describe(item);
-        const inMenu = !!item.closest('[role="menu"], [role="dialog"], .artdeco-dropdown, .artdeco-dropdown__content');
-        const instant = /\brepost instantly\b|\breshare instantly\b/.test(value);
-        return inMenu && instant && !/with your thoughts|quote/.test(value);
+        // LinkedIn's current popup uses role=button elements inside generic
+        // containers, not its former role=menu/artdeco markup.  Match only the
+        // exact visible direct-share action; never choose the thoughts/quote path.
+        const instant = /^(repost|reshare) instantly$/.test(value);
+        return instant && !/with your thoughts|quote/.test(value);
       });
   }
   if (!action) return { confirmed: false, detail: "NexaShare opened the repost menu but could not identify LinkedIn's visible Repost instantly choice." };
