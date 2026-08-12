@@ -21,15 +21,15 @@
   <div class="nav-group-label">Account</div>
   <button class="nav-item" data-view="settings"><span class="nav-icon">&#9881;</span>Settings</button>
   <button class="nav-item" data-view="referral"><span class="nav-icon">&#9671;</span>Referral</button>
-  <div class="spacer"></div><div class="version">NexaShare &middot; Version 1.2.9</div><a class="nav-item" href="/api/auth/logout"><span class="nav-icon">&#8618;</span>Logout</a>
+  <div class="spacer"></div><div class="version">NexaShare &middot; Version 1.2.10</div><a class="nav-item" href="/api/auth/logout"><span class="nav-icon">&#8618;</span>Logout</a>
 </aside>
 <main class="content">
-  <div class="topbar"><h1 id="pageTitle">Dashboard</h1><span class="user" id="userName">Loadingâ€¦</span></div>
+  <div class="topbar"><h1 id="pageTitle">Dashboard</h1><span class="user" id="userName">Loading...</span></div>
 
   <section class="view active" id="view-dashboard">
-    <div id="readinessBanner" class="notice">Checking whether NexaShare can runâ€¦</div>
+    <div id="readinessBanner" class="notice">Checking whether NexaShare can run...</div>
     <div class="toolbar"><p class="muted">Confirmed and attempted repost activity</p><select id="range"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="all">All time</option></select></div>
-    <div class="grid" id="summaryCards"><div class="stat"><div class="label">Loading</div><div class="value">â€”</div></div></div>
+    <div class="grid" id="summaryCards"><div class="stat"><div class="label">Loading</div><div class="value">-</div></div></div>
     <div class="grid" style="margin-top:14px"><div class="panel chart" style="grid-column:span 2"><div class="toolbar"><strong>Outcomes over time</strong><span class="muted" id="timelineSummary"></span></div><div class="bars" id="timelineChart"></div></div><div class="panel chart"><strong>Outcome mix</strong><div class="donut-wrap" id="mixChart"></div></div></div>
   </section>
 
@@ -61,7 +61,7 @@
   <section class="view" id="view-referral"><div class="panel"><h2>Referral</h2><div class="empty"><strong>Referral tracking is not configured yet.</strong><p>No referral code, reward, or attribution will be claimed until the product rules and storage are approved.</p></div></div></section>
 </main></div>
 <script>
-const EXPECTED_EXTENSION_VERSION='1.2.9';
+const EXPECTED_EXTENSION_VERSION='1.2.10';
 const EXTENSION_PACKAGE=`nexashare-extension-${EXPECTED_EXTENSION_VERSION}.zip`;document.querySelectorAll('a[href*="nexashare-extension-"]').forEach(link=>{link.href=`/${EXTENSION_PACKAGE}`;link.download=EXTENSION_PACKAGE;link.textContent=`Download v${EXPECTED_EXTENSION_VERSION}`});
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let model={user:null,reposts:[],team:[],companies:[],subscription:null};let ext={installed:false,version:null,connected:false,linkedIn:false,lastSync:null,log:[]};
