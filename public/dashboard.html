@@ -21,7 +21,7 @@
   <div class="nav-group-label">Account</div>
   <button class="nav-item" data-view="settings"><span class="nav-icon">&#9881;</span>Settings</button>
   <button class="nav-item" data-view="referral"><span class="nav-icon">&#9671;</span>Referral</button>
-  <div class="spacer"></div><div class="version">NexaShare &middot; Version 1.2.10</div><a class="nav-item" href="/api/auth/logout"><span class="nav-icon">&#8618;</span>Logout</a>
+  <div class="spacer"></div><div class="version">NexaShare &middot; Version 1.2.11</div><a class="nav-item" href="/api/auth/logout"><span class="nav-icon">&#8618;</span>Logout</a>
 </aside>
 <main class="content">
   <div class="topbar"><h1 id="pageTitle">Dashboard</h1><span class="user" id="userName">Loading...</span></div>
@@ -61,7 +61,7 @@
   <section class="view" id="view-referral"><div class="panel"><h2>Referral</h2><div class="empty"><strong>Referral tracking is not configured yet.</strong><p>No referral code, reward, or attribution will be claimed until the product rules and storage are approved.</p></div></div></section>
 </main></div>
 <script>
-const EXPECTED_EXTENSION_VERSION='1.2.10';
+const EXPECTED_EXTENSION_VERSION='1.2.11';
 const EXTENSION_PACKAGE=`nexashare-extension-${EXPECTED_EXTENSION_VERSION}.zip`;document.querySelectorAll('a[href*="nexashare-extension-"]').forEach(link=>{link.href=`/${EXTENSION_PACKAGE}`;link.download=EXTENSION_PACKAGE;link.textContent=`Download v${EXPECTED_EXTENSION_VERSION}`});
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let model={user:null,reposts:[],team:[],companies:[],subscription:null};let ext={installed:false,version:null,connected:false,linkedIn:false,lastSync:null,log:[]};
