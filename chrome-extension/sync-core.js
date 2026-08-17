@@ -127,7 +127,7 @@ async function runFullSync({ trigger = 'manual' } = {}) {
       const scraped = await scrapeCompanyPosts(company);
       const posts = scraped.posts;
       if (scraped.companyName && scraped.companyName !== company.name) {
-        await authenticatedFetch(`/api/companies/${company.id}`, {
+        await authenticatedFetch(`/api/${company.sourceType === 'person' ? 'people' : 'companies'}/${company.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: scraped.companyName })
@@ -138,7 +138,8 @@ async function runFullSync({ trigger = 'manual' } = {}) {
       }
       totalScraped += posts.length;
       await log('info', 'company:scraped', { company: company.name, posts: posts.length });
-      const seen = new Set(processedPostIds[String(company.id)] || []);
+      const sourceKey = `${company.sourceType || 'company'}:${company.id}`;
+      const seen = new Set(processedPostIds[sourceKey] || []);
       let candidateHandled = false;
       for (const post of posts) {
         if (!post.url || seen.has(post.id)) continue;
@@ -161,7 +162,7 @@ async function runFullSync({ trigger = 'manual' } = {}) {
       if (!candidateHandled && !posts.some(post => post.alreadyReposted && !seen.has(post.id))) {
         outcomes.push(makeCompanyOutcome(company, 'skipped', posts.length ? 'No new eligible posts were found.' : 'No posts were found on the company page.'));
       }
-      processedPostIds[String(company.id)] = [...seen].slice(-500);
+      processedPostIds[sourceKey] = [...seen].slice(-500);
     } catch (error) {
       await log('error', 'company:failed', { company: company.name, error: String(error) });
       outcomes.push(makeCompanyOutcome(company, 'failed', String(error)));
@@ -381,7 +382,9 @@ function makeOutcome(company, post, status, detail, repostUrl = '') {
 function makeCompanyOutcome(company, status, detail) {
   return {
     companyName: company.name,
-    postUrl: `https://www.linkedin.com/company/${company.vanity}/posts/`,
+    postUrl: company.sourceType === 'person'
+      ? `https://www.linkedin.com/in/${company.vanity}/recent-activity/all/`
+      : `https://www.linkedin.com/company/${company.vanity}/posts/`,
     postTextSnippet: '',
     status,
     detail,
