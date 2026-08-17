@@ -89,8 +89,14 @@ async function runFullSync({ trigger = 'manual' } = {}) {
 
   let companies;
   try {
-    const data = await authenticatedFetch('/api/companies');
-    companies = data.companies || [];
+    const [companyData, peopleData] = await Promise.all([
+      authenticatedFetch('/api/companies'),
+      authenticatedFetch('/api/people')
+    ]);
+    companies = [
+      ...(companyData.companies || []).map(item => ({ ...item, sourceType: 'company' })),
+      ...(peopleData.people || []).map(item => ({ ...item, sourceType: 'person' }))
+    ];
     await chrome.storage.local.set({ companies });
   } catch (error) {
     await log('error', 'configuration:failed', { error: String(error) });
