@@ -44,7 +44,7 @@ function validCompanyVanity(value) {
 }
 
 function validPersonVanity(value) {
-  return typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{2,99}$/.test(value);
+  return typeof value === 'string' && /^(?:[a-zA-Z0-9_-]|%[0-9A-Fa-f]{2}){3,100}$/.test(value);
 }
 
 function escapeHtml(value) {
