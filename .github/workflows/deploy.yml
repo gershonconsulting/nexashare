@@ -45,6 +45,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Build current private extension package
+        run: |
+          rm -f public/nexashare-extension-1.2.12.zip public/nexashare-extension.zip
+          (cd chrome-extension && zip -r ../public/nexashare-extension-1.2.12.zip .)
+          cp public/nexashare-extension-1.2.12.zip public/nexashare-extension.zip
+
       - name: Apply D1 migrations and deploy Worker with assets
         uses: cloudflare/wrangler-action@v3
         with:
