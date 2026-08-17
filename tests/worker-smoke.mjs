@@ -51,8 +51,8 @@ assert.equal(healthBody.setup_reminder_email, 'not_configured');
 let scheduledPromise;
 worker.scheduled({}, env, { waitUntil(promise) { scheduledPromise = promise; } });
 assert.deepEqual(await scheduledPromise, [
-  { sent: 0, skipped: 'email_not_configured' },
-  { sent: 0, skipped: 'email_not_configured' }
+  { sent: 0, skipped: 'resend_not_configured' },
+  { sent: 0, skipped: 'resend_not_configured' }
 ]);
 
 let oauthStateValues;
