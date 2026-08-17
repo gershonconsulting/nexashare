@@ -53,6 +53,26 @@ function escapeHtml(value) {
   })[character]);
 }
 
+async function sendEmailWithResend(env, message) {
+  if (!env.RESEND_API_KEY) {
+    const error = new Error('Resend is not configured.');
+    error.code = 'resend_not_configured';
+    throw error;
+  }
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: message.from, to: [message.to], subject: message.subject, text: message.text, html: message.html })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.id) {
+    const error = new Error(String(payload.message || `Resend returned HTTP ${response.status}`).slice(0, 500));
+    error.code = 'resend_send_failed';
+    throw error;
+  }
+  return { messageId: payload.id };
+}
+
 function buildMissingCompanyReminder(user) {
   const rawFirstName = String(user.name || '').trim().split(/\s+/)[0] || 'there';
   const firstName = escapeHtml(rawFirstName);
@@ -67,9 +87,9 @@ function buildMissingCompanyReminder(user) {
 }
 
 async function sendMissingCompanyReminders(env) {
-  if (!env.EMAIL) {
-    console.log('Setup reminders skipped: EMAIL binding is not configured.');
-    return { sent: 0, skipped: 'email_not_configured' };
+  if (!env.RESEND_API_KEY) {
+    console.log('Setup reminders skipped: RESEND_API_KEY is not configured.');
+    return { sent: 0, skipped: 'resend_not_configured' };
   }
   const eligible = await env.DB.prepare(
     `SELECT u.id, u.email, u.name FROM users u
@@ -91,7 +111,7 @@ async function sendMissingCompanyReminders(env) {
          attempt_count = attempt_count + 1, attempted_at = datetime('now'), updated_at = datetime('now'), error = NULL`
     ).bind(user.id, SETUP_REMINDER_TYPE).run();
     try {
-      const result = await env.EMAIL.send(buildMissingCompanyReminder(user));
+      const result = await sendEmailWithResend(env, buildMissingCompanyReminder(user));
       await env.DB.prepare(
         `UPDATE setup_reminders SET status = 'sent', sent_at = datetime('now'), provider_message_id = ?, updated_at = datetime('now'), error = NULL
          WHERE user_id = ? AND reminder_type = ?`
@@ -125,7 +145,7 @@ function buildDailyRepostReport(user, rows) {
 }
 
 async function sendDailyRepostReports(env) {
-  if (!env.EMAIL) return { sent: 0, skipped: 'email_not_configured' };
+  if (!env.RESEND_API_KEY) return { sent: 0, skipped: 'resend_not_configured' };
   const users = await env.DB.prepare(
     `SELECT DISTINCT u.id, u.email, u.name, u.team_id FROM users u
      JOIN companies c ON c.team_id = u.team_id
@@ -142,7 +162,7 @@ async function sendDailyRepostReports(env) {
        ORDER BY datetime(attempted_at) DESC LIMIT 100`
     ).bind(user.id).all();
     try {
-      const result = await env.EMAIL.send(buildDailyRepostReport(user, outcomes.results || []));
+      const result = await sendEmailWithResend(env, buildDailyRepostReport(user, outcomes.results || []));
       await env.DB.prepare(
         `INSERT INTO daily_reports (user_id, report_date, status, outcome_count, provider_message_id, sent_at)
          VALUES (?, date('now'), 'sent', ?, ?, datetime('now'))`
@@ -281,7 +301,8 @@ async function handleAPI(request, env) {
       return jsonResponse({
         status: 'ready',
         database: 'connected',
-        setup_reminder_email: env.EMAIL ? 'configured' : 'not_configured',
+        resend_email: env.RESEND_API_KEY ? 'configured' : 'not_configured',
+        daily_repost_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         canonical_origin: APP_ORIGIN,
         checked_at: new Date().toISOString()
       });
@@ -289,7 +310,8 @@ async function handleAPI(request, env) {
       return jsonResponse({
         status: 'degraded',
         database: 'unavailable',
-        setup_reminder_email: env.EMAIL ? 'configured' : 'not_configured',
+        resend_email: env.RESEND_API_KEY ? 'configured' : 'not_configured',
+        daily_repost_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         canonical_origin: APP_ORIGIN,
         checked_at: new Date().toISOString()
       }, 503);
