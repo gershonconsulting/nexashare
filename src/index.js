@@ -301,6 +301,7 @@ async function handleAPI(request, env) {
       return jsonResponse({
         status: 'ready',
         database: 'connected',
+        setup_reminder_email: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         resend_email: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         daily_repost_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         canonical_origin: APP_ORIGIN,
@@ -310,6 +311,7 @@ async function handleAPI(request, env) {
       return jsonResponse({
         status: 'degraded',
         database: 'unavailable',
+        setup_reminder_email: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         resend_email: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         daily_repost_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         canonical_origin: APP_ORIGIN,
