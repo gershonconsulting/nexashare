@@ -144,6 +144,9 @@ assert.match(dashboardSource, /Free access extended/);
 assert.match(dashboardSource, /id="momentumGrid"/);
 assert.match(dashboardSource, /function renderMomentum/);
 assert.match(dashboardSource, /Current streak/);
+assert.match(dashboardSource, /Content processed/);
+assert.match(dashboardSource, /Confirmed reposts/);
+assert.match(dashboardSource, /Success rate/);
 assert.match(dashboardSource, /id="addCompanyButton"/);
 assert.match(dashboardSource, /Add companies/);
 assert.match(dashboardSource, /Add people/);
@@ -183,5 +186,6 @@ assert.match(homeSource, /fetch\('\/api\/user'/);
 assert.match(homeSource, /location\.replace\('\/dashboard\.html'\)/);
 
 console.log('Worker and extension smoke checks passed.');
+
 
 
