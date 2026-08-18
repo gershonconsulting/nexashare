@@ -43,6 +43,16 @@
 <section class="ext-section" id="extension"><div class="container"><h2>Private Testing Extension</h2><p>For approved local testing only. Download the ZIP, extract it, and load the folder with Chrome's Load unpacked option.</p><a href="/nexashare-extension-1.2.11.zip" class="btn btn-primary" download="nexashare-extension-1.2.11.zip">Download nexashare-extension-1.2.11.zip</a></div></section>
   <section class="cta-section"><div class="container"><h2>Ready to amplify?</h2><p>Connect LinkedIn, add the companies you want to follow, and let NexaShare guide the rest.</p><a href="/login.html" class="btn btn-primary">Connect with LinkedIn</a></div></section>
   <footer><div class="container">Â© 2026 NexaShare. All rights reserved.</div></footer>
+<script>
+(async () => {
+  try {
+    const response = await fetch('/api/user', { credentials: 'same-origin', cache: 'no-store' });
+    if (response.ok) location.replace('/dashboard.html');
+  } catch (_) {
+    // The public homepage remains available if the session check cannot complete.
+  }
+})();
+</script>
 </body>
 </html>
 
