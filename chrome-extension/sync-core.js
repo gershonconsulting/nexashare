@@ -3,6 +3,7 @@ const MAX_SCROLL_ATTEMPTS = 5;
 const SCROLL_DELAY_MS = 2000;
 const REPOST_DELAY_MS = 3000;
 const PAGE_LOAD_MS = 6000;
+const POST_DISCOVERY_ATTEMPTS = 16;
 const MAX_LOG_ENTRIES = 200;
 const DAILY_ALARM = 'dailyRepost';
 
@@ -166,7 +167,7 @@ async function runFullSync({ trigger = 'manual' } = {}) {
         break;
       }
       if (!candidateHandled && !posts.some(post => post.alreadyReposted && !seen.has(post.id))) {
-        outcomes.push(makeCompanyOutcome(company, 'skipped', posts.length ? 'No new eligible posts were found.' : 'No posts were found on the company page.'));
+        outcomes.push(makeCompanyOutcome(company, 'skipped', posts.length ? 'No new eligible posts were found.' : (scraped.notReady ? 'LinkedIn did not finish loading the posts in time. NexaShare will retry on the next sync.' : 'No posts were found on the company page.')));
       }
       processedPostIds[sourceKey] = [...seen].slice(-500);
     } catch (error) {
@@ -234,29 +235,47 @@ async function ensureLinkedInSession() {
   });
 }
 
-async function scrapeCompanyPosts(company) {
-  const url = `https://www.linkedin.com/company/${company.vanity}/posts/?feedView=all`;
+async function scrapeCompanyPosts(source) {
+  const url = source.sourceType === 'person'
+    ? `https://www.linkedin.com/in/${source.vanity}/recent-activity/all/`
+    : `https://www.linkedin.com/company/${source.vanity}/posts/?feedView=all`;
   return withBackgroundTab(url, async tabId => {
+    const loaded = await waitForLinkedInPosts(tabId);
+    if (!loaded) return { companyName: '', posts: [], notReady: true };
     for (let index = 0; index < MAX_SCROLL_ATTEMPTS; index++) {
       await chrome.scripting.executeScript({ target: { tabId }, func: () => window.scrollBy(0, 1500) });
       await sleep(SCROLL_DELAY_MS);
     }
     const results = await chrome.scripting.executeScript({ target: { tabId }, func: extractCompanyPageFromDOM });
-    return results?.[0]?.result || { companyName: '', posts: [] };
+    return results?.[0]?.result || { companyName: '', posts: [], notReady: true };
   });
 }
 
+async function waitForLinkedInPosts(tabId) {
+  for (let attempt = 0; attempt < POST_DISCOVERY_ATTEMPTS; attempt++) {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"]').length
+    });
+    if (Number(results?.[0]?.result) > 0) return true;
+    await sleep(1250);
+  }
+  return false;
+}
+
 function extractCompanyPageFromDOM() {
-  const posts = [];
-  document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], .occludable-update, [data-view-name="feed-full-update"]').forEach(item => {
+  const byId = new Map();
+  document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], [data-view-name="feed-full-update"]').forEach(item => {
     const text = item.querySelector('.feed-shared-text, .update-components-text, [data-test-id="main-feed-activity-card__commentary"]')?.textContent?.trim() || '';
     const link = item.querySelector('a[href*="/feed/update/"], a[href*="/posts/"]');
     const match = (item.getAttribute('data-urn') || '').match(/activity:(\d+)/) || link?.href?.match(/activity(?::|-)(\d+)/);
-    if (!text && !match) return;
-    const button = item.querySelector('button[aria-label*="Repost"], button[aria-label*="repost"], button[data-view-name*="repost"]');
-    posts.push({
-      id: match?.[1] || `post-${posts.length}`,
-      url: match ? `https://www.linkedin.com/feed/update/urn:li:activity:${match[1]}/` : '',
+    if (!match) return;
+    const id = match[1];
+    if (byId.has(id)) return;
+    const button = item.querySelector('button[aria-label*="Repost"], button[aria-label*="repost"], button[data-view-name*="repost"], button');
+    byId.set(id, {
+      id,
+      url: `https://www.linkedin.com/feed/update/urn:li:activity:${id}/`,
       text,
       alreadyReposted: !!button && (
         button.getAttribute('aria-pressed') === 'true' ||
@@ -269,7 +288,7 @@ function extractCompanyPageFromDOM() {
   const metaTitle = document.querySelector('meta[property="og:title"]')?.content || '';
   const rawName = heading?.textContent?.trim() || metaTitle.replace(/\s*[|\-]\s*LinkedIn.*$/i, '').trim();
   const companyName = rawName && !/^\d+$/.test(rawName) && !/^linkedin$/i.test(rawName) ? rawName.slice(0, 100) : '';
-  return { companyName, posts };
+  return { companyName, posts: [...byId.values()] };
 }
 
 async function repostContent(post) {
