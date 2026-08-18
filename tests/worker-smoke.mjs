@@ -83,6 +83,7 @@ const onboardingSource = await readFile(new URL('../public/onboarding.html', imp
 const extensionSetupSource = await readFile(new URL('../public/extension-setup.html', import.meta.url), 'utf8');
 const loginSource = await readFile(new URL('../public/login.html', import.meta.url), 'utf8');
 const registerSource = await readFile(new URL('../public/register.html', import.meta.url), 'utf8');
+const homeSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const reminderMigration = await readFile(new URL('../migrations/0002_setup_reminders.sql', import.meta.url), 'utf8');
 const repostLinksMigration = await readFile(new URL('../migrations/0003_repost_links.sql', import.meta.url), 'utf8');
 const dailyReportsMigration = await readFile(new URL('../migrations/0004_daily_reports.sql', import.meta.url), 'utf8');
@@ -174,6 +175,8 @@ assert.match(loginSource, /Connect with LinkedIn/);
 assert.doesNotMatch(loginSource, /Create a team|Company \/ Team name|register\.html/);
 assert.match(registerSource, /location\.replace\('\/login\.html'\)/);
 assert.doesNotMatch(registerSource, /Create your team|teamName/);
+assert.match(homeSource, /fetch\('\/api\/user'/);
+assert.match(homeSource, /location\.replace\('\/dashboard\.html'\)/);
 
 console.log('Worker and extension smoke checks passed.');
 
