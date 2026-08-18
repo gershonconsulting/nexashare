@@ -145,7 +145,11 @@ assert.match(dashboardSource, /id="momentumGrid"/);
 assert.match(dashboardSource, /function renderMomentum/);
 assert.match(dashboardSource, /Current streak/);
 assert.match(dashboardSource, /id="addCompanyButton"/);
-assert.match(dashboardSource, /Checking and adding this company/);
+assert.match(dashboardSource, /Add companies/);
+assert.match(dashboardSource, /Add people/);
+assert.match(dashboardSource, /function bulkLinks/);
+assert.match(dashboardSource, /companyFromLink/);
+assert.match(dashboardSource, /personFromLink/);
 assert.match(extensionSetupSource, /Load unpacked/);
 assert.match(extensionSetupSource, /Current version 1\.2\.13/);
 assert.match(extensionSetupSource, /nexashare-extension-1\.2\.13\.zip/);
@@ -179,4 +183,5 @@ assert.match(homeSource, /fetch\('\/api\/user'/);
 assert.match(homeSource, /location\.replace\('\/dashboard\.html'\)/);
 
 console.log('Worker and extension smoke checks passed.');
+
 
