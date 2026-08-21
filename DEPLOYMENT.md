@@ -43,6 +43,19 @@ The Cloudflare account must contain:
 - D1 database ID in `wrangler.toml`:
   `a282afe3-af5f-44e3-9982-c49dd5bd641d`
 - Worker secret: `LINKEDIN_CLIENT_SECRET`
+- Worker secret: `RESEND_API_KEY`
+- Worker secret: `REGISTRATION_NOTIFICATION_TO` (the email address that receives
+  each new-user alert)
+
+Set the notification recipient without committing the address:
+
+```bash
+npx wrangler secret put REGISTRATION_NOTIFICATION_TO
+```
+
+Registration alerts are sent from the verified Resend sender
+`NexaShare <hello@nexashare.com>`. They are queued after a new user is stored,
+and a Resend failure does not block the user's first login.
 
 The LinkedIn developer application must allow this exact OAuth redirect:
 
@@ -96,7 +109,8 @@ It never uploads application files to Hostinger.
 
 1. Confirm the Cloudflare zone is active and email DNS is intact.
 2. Confirm the GitHub `production` environment and both secrets exist.
-3. Confirm the Worker secret `LINKEDIN_CLIENT_SECRET` exists.
+3. Confirm the Worker secrets `LINKEDIN_CLIENT_SECRET`, `RESEND_API_KEY`, and
+   `REGISTRATION_NOTIFICATION_TO` exist.
 4. Confirm the LinkedIn redirect URL is updated.
 5. Immediately before the first custom-domain deployment, remove only the old
    web-host records that conflict at `nexashare.com` and `www.nexashare.com`
