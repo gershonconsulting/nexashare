@@ -1,5 +1,5 @@
 name = "nexashare"
-main = "src/index.js"
+main = "src/worker.js"
 compatibility_date = "2024-12-01"
 
 [observability]
