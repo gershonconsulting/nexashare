@@ -6,6 +6,7 @@ const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00';
 const SETUP_REMINDER_TYPE = 'missing_company_after_connection';
 const SETUP_REMINDER_FROM = 'NexaShare <hello@nexashare.com>';
 const DAILY_REPORT_TYPE = 'daily_repost_report';
+const REGISTRATION_NOTIFICATION_FROM = SETUP_REMINDER_FROM;
 
 function jsonResponse(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
@@ -71,6 +72,37 @@ async function sendEmailWithResend(env, message) {
     throw error;
   }
   return { messageId: payload.id };
+}
+
+function buildRegistrationNotification(env, user) {
+  const registeredAt = new Date().toISOString();
+  const name = String(user.name || '').trim() || 'Not provided';
+  const email = String(user.email || '').trim() || 'Not provided';
+  return {
+    to: env.REGISTRATION_NOTIFICATION_TO,
+    from: REGISTRATION_NOTIFICATION_FROM,
+    subject: `New NexaShare registration: ${name}`,
+    text: `A new user registered on NexaShare.\n\nName: ${name}\nEmail: ${email}\nUser ID: ${user.id}\nTeam ID: ${user.teamId}\nRegistered at: ${registeredAt}`,
+    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:600px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:#0a66c2;color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">New NexaShare registration</div></td></tr><tr><td style="padding:26px"><table width="100%" cellspacing="0" style="border-collapse:collapse"><tr><td style="padding:9px 0;color:#667085">Name</td><td style="padding:9px 0;font-weight:700">${escapeHtml(name)}</td></tr><tr><td style="padding:9px 0;color:#667085">Email</td><td style="padding:9px 0;font-weight:700">${escapeHtml(email)}</td></tr><tr><td style="padding:9px 0;color:#667085">User ID</td><td style="padding:9px 0">${escapeHtml(user.id)}</td></tr><tr><td style="padding:9px 0;color:#667085">Team ID</td><td style="padding:9px 0">${escapeHtml(user.teamId)}</td></tr><tr><td style="padding:9px 0;color:#667085">Registered at</td><td style="padding:9px 0">${escapeHtml(registeredAt)}</td></tr></table></td></tr></table></td></tr></table></body></html>`
+  };
+}
+
+async function sendRegistrationNotification(env, user) {
+  if (!env.RESEND_API_KEY || !env.REGISTRATION_NOTIFICATION_TO) {
+    console.log('Registration notification skipped: Resend or recipient is not configured.');
+    return { sent: 0, skipped: 'registration_notification_not_configured' };
+  }
+  try {
+    const result = await sendEmailWithResend(env, buildRegistrationNotification(env, user));
+    return { sent: 1, messageId: result.messageId };
+  } catch (error) {
+    console.error('Registration notification failed', {
+      userId: user.id,
+      code: error?.code,
+      message: error?.message
+    });
+    return { sent: 0, error: error?.code || 'registration_notification_failed' };
+  }
 }
 
 function buildMissingCompanyReminder(user) {
@@ -175,7 +207,7 @@ async function sendDailyRepostReports(env) {
   return { sent, eligible: (users.results || []).length };
 }
 
-async function handleAuth(request, env) {
+async function handleAuth(request, env, ctx) {
   const url = new URL(request.url);
 
   if (url.pathname === '/api/auth/linkedin') {
@@ -243,6 +275,14 @@ async function handleAuth(request, env) {
           'INSERT INTO users (email, name, linkedin_id, linkedin_access_token, team_id, role) VALUES (?, ?, ?, ?, ?, ?)'
         ).bind(profile.email || '', profile.name || '', profile.sub, tokenData.access_token, teamId, 'admin').run();
         userId = result.meta.last_row_id;
+        const notification = sendRegistrationNotification(env, {
+          id: userId,
+          teamId,
+          name: profile.name,
+          email: profile.email
+        });
+        if (ctx?.waitUntil) ctx.waitUntil(notification);
+        else await notification;
       }
 
       const sessionToken = randomToken();
@@ -290,9 +330,9 @@ async function getExtensionUser(request, env) {
   ).bind(await sha256(auth.slice(7))).first();
 }
 
-async function handleAPI(request, env) {
+async function handleAPI(request, env, ctx) {
   const url = new URL(request.url);
-  const authResponse = await handleAuth(request, env);
+  const authResponse = await handleAuth(request, env, ctx);
   if (authResponse) return authResponse;
 
   if (url.pathname === '/api/health' && request.method === 'GET') {
@@ -303,6 +343,7 @@ async function handleAPI(request, env) {
         database: 'connected',
         setup_reminder_email: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         resend_email: env.RESEND_API_KEY ? 'configured' : 'not_configured',
+        registration_notification: env.RESEND_API_KEY && env.REGISTRATION_NOTIFICATION_TO ? 'configured' : 'not_configured',
         daily_repost_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         canonical_origin: APP_ORIGIN,
         checked_at: new Date().toISOString()
@@ -313,6 +354,7 @@ async function handleAPI(request, env) {
         database: 'unavailable',
         setup_reminder_email: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         resend_email: env.RESEND_API_KEY ? 'configured' : 'not_configured',
+        registration_notification: env.RESEND_API_KEY && env.REGISTRATION_NOTIFICATION_TO ? 'configured' : 'not_configured',
         daily_repost_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         canonical_origin: APP_ORIGIN,
         checked_at: new Date().toISOString()
@@ -538,10 +580,10 @@ async function handleAPI(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
-    if (url.pathname.startsWith('/api/')) return handleAPI(request, env);
+    if (url.pathname.startsWith('/api/')) return handleAPI(request, env, ctx);
     return env.ASSETS.fetch(request);
   },
   async scheduled(_event, env, ctx) {
