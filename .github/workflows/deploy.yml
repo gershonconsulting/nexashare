@@ -26,11 +26,15 @@ jobs:
           node-version: "22"
 
       - name: Run Worker smoke checks
-        run: node tests/worker-smoke.mjs
+        run: |
+          node tests/worker-smoke.mjs
+          node tests/referral-program.test.mjs
 
       - name: Validate JavaScript and Chrome manifest
         run: |
           node --check src/index.js
+          node --check src/worker.js
+          node --check src/referrals.js
           node --check chrome-extension/sync-core.js
           node --check chrome-extension/content.js
           node --check chrome-extension/popup.js
