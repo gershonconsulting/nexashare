@@ -47,6 +47,7 @@ assert.equal(health.status, 200);
 const healthBody = await health.json();
 assert.equal(healthBody.status, 'ready');
 assert.equal(healthBody.setup_reminder_email, 'not_configured');
+assert.equal(healthBody.registration_notification, 'not_configured');
 
 let scheduledPromise;
 worker.scheduled({}, env, { waitUntil(promise) { scheduledPromise = promise; } });
@@ -116,6 +117,10 @@ assert.match(extensionSource, /findConfirmedRepostUrl/);
 assert.match(repostLinksMigration, /ADD COLUMN repost_url/);
 assert.match(dailyReportsMigration, /UNIQUE\(user_id, report_date\)/);
 assert.match(workerSource, /sendDailyRepostReports/);
+assert.match(workerSource, /sendRegistrationNotification/);
+assert.match(workerSource, /REGISTRATION_NOTIFICATION_TO/);
+assert.match(workerSource, /New NexaShare registration/);
+assert.match(workerSource, /if \(existingUser\)[\s\S]*else \{[\s\S]*sendRegistrationNotification/);
 assert.match(workerSource, /Only LinkedIn-confirmed reposts are counted as successful/);
 assert.equal(manifest.version, '1.2.13');
 assert.equal(manifest.icons['128'], 'icons/icon128.png');
