@@ -152,6 +152,20 @@ async function qualifyReferralAfterIngest(request, env, ctx) {
   return response;
 }
 
+async function injectReferralDashboardLink(request, env, ctx) {
+  const response = await app.fetch(request, env, ctx);
+  if (!response.ok) return response;
+  const contentType = response.headers.get('Content-Type') || '';
+  if (!contentType.includes('text/html')) return response;
+  const html = await response.text();
+  const replacement = `<section class="view" id="view-referral"><div class="panel"><h2>Referral program</h2><p class="muted">Invite new NexaShare members with your personal link and track when they become qualified after their first LinkedIn-confirmed repost.</p><p><a class="button" href="/referral.html">Open referral dashboard</a></p><div class="notice warning">Referral rewards are not applied to billing yet. Attribution and qualification are active; reward credits remain disabled until Stripe entitlements are verified.</div></div></section>`;
+  const rewritten = html.replace(/<section class="view" id="view-referral">[\s\S]*?<\/section>/, replacement);
+  const headers = new Headers(response.headers);
+  headers.delete('Content-Length');
+  headers.set('Cache-Control', 'no-store');
+  return new Response(rewritten, { status: response.status, statusText: response.statusText, headers });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -159,6 +173,7 @@ export default {
     if (url.pathname === '/api/auth/linkedin' && request.method === 'GET') return rememberReferralOnOAuthStart(request, env, ctx);
     if (url.pathname === '/api/auth/callback' && request.method === 'GET') return attachReferralAfterOAuth(request, env, ctx);
     if (url.pathname === '/api/extension/ingest' && request.method === 'POST') return qualifyReferralAfterIngest(request, env, ctx);
+    if (url.pathname === '/dashboard.html' && request.method === 'GET') return injectReferralDashboardLink(request, env, ctx);
     return app.fetch(request, env, ctx);
   },
   async scheduled(event, env, ctx) {
