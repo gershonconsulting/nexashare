@@ -157,6 +157,11 @@ async function runFullSync({ trigger = 'manual' } = {}) {
         }
         candidateHandled = true;
         try {
+          await authenticatedFetch('/api/extension/deliveries/processing', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postUrl: post.url })
+          });
           const result = await repostContent(post);
           outcomes.push(makeOutcome(company, post, result.confirmed ? 'confirmed' : 'failed', result.detail, result.repostUrl));
           if (result.confirmed) rememberPost(seen, post.id);

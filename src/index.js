@@ -1,3 +1,5 @@
+import { getCampaignHealth, markDeliveryProcessing, recordDeliveryOutcome } from './delivery-engine.js';
+
 const LINKEDIN_CLIENT_ID = '78dsjq2rbcv26t';
 const APP_ORIGIN = 'https://nexashare.com';
 const LINKEDIN_REDIRECT_URI = `${APP_ORIGIN}/api/auth/callback`;
@@ -541,9 +543,45 @@ async function handleAPI(request, env, ctx) {
         status, String(outcome.companyName || '').slice(0, 100), String(outcome.detail || '').slice(0, 500),
         outcome.attemptedAt || new Date().toISOString(), status === 'confirmed' ? (outcome.confirmedAt || new Date().toISOString()) : null
       ).run();
+      await recordDeliveryOutcome(env.DB, {
+        teamId: user.team_id,
+        userId: user.id,
+        outcome: { ...outcome, status, postUrl }
+      });
       accepted++;
     }
     return jsonResponse({ success: true, accepted });
+  }
+
+  if (url.pathname === '/api/extension/deliveries/processing' && request.method === 'POST') {
+    const user = await getExtensionUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Invalid extension token' }, 401);
+    const body = await request.json();
+    const postUrl = String(body.postUrl || '').slice(0, 1000);
+    if (!postUrl.startsWith('https://www.linkedin.com/')) return jsonResponse({ error: 'A LinkedIn post URL is required' }, 400);
+    await markDeliveryProcessing(env.DB, { teamId: user.team_id, userId: user.id, postUrl });
+    return jsonResponse({ success: true });
+  }
+
+  if (url.pathname === '/api/campaign-health' && request.method === 'GET') {
+    const user = await getUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
+    return jsonResponse({ health: await getCampaignHealth(env.DB, user.team_id) });
+  }
+
+  if (url.pathname === '/api/delivery-jobs/retry' && request.method === 'POST') {
+    const user = await getUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const body = await request.json();
+    const id = Number(body.id);
+    if (!Number.isInteger(id) || id < 1) return jsonResponse({ error: 'A delivery job ID is required' }, 400);
+    const result = await env.DB.prepare(
+      `UPDATE delivery_jobs SET status = 'scheduled', next_retry_at = datetime('now'),
+       failure_code = NULL, failure_detail = NULL, completed_at = NULL, updated_at = datetime('now')
+       WHERE id = ? AND team_id = ? AND status = 'failed' AND attempt_count < max_attempts`
+    ).bind(id, user.team_id).run();
+    if (!result.meta.changes) return jsonResponse({ error: 'Delivery is not eligible for retry' }, 409);
+    return jsonResponse({ success: true });
   }
 
   if (url.pathname === '/api/reposts' && request.method === 'GET') {
