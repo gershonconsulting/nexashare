@@ -3,12 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="refresh" content="0;url=/login.html">
   <title>Connect with LinkedIn — NexaShare</title>
   <link rel="canonical" href="https://nexashare.com/login.html">
 </head>
 <body>
-  <p>Registration is not a separate step. <a href="/login.html">Connect with LinkedIn</a> to continue.</p>
-  <script>location.replace('/login.html');</script>
+  <p>Registration is not a separate step. <a id="continueLink" href="/login.html">Connect with LinkedIn</a> to continue.</p>
+  <script>
+    const target = '/login.html' + location.search;
+    document.getElementById('continueLink').href = target;
+    location.replace(target);
+  </script>
 </body>
 </html>
