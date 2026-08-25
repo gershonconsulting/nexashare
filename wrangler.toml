@@ -1,5 +1,5 @@
 name = "nexashare"
-main = "src/index.js"
+main = "src/worker.js"
 compatibility_date = "2024-12-01"
 
 [observability]
@@ -13,6 +13,10 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "nexashare-db"
 database_id = "a282afe3-af5f-44e3-9982-c49dd5bd641d"
+
+[triggers]
+# 06:00 UTC = 08:00 CEST / 07:00 CET. Cloudflare cron schedules use UTC.
+crons = ["0 6 * * *"]
 
 [[routes]]
 pattern = "nexashare.com"
