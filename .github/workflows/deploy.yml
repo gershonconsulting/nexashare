@@ -1,9 +1,12 @@
 name: Deploy NexaShare to Cloudflare
 
-# Keep production deployment manual until nexashare.com is an active Cloudflare
-# zone and the production environment/secrets described in DEPLOYMENT.md exist.
+# Production deployment can be run manually. A push to main also deploys the
+# current release so merged production changes are not left unpublished.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
