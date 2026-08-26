@@ -277,7 +277,11 @@ function extractCompanyPageFromDOM() {
     if (!match) return;
     const id = match[1];
     if (byId.has(id)) return;
-    const button = item.querySelector('button[aria-label*="Repost"], button[aria-label*="repost"], button[data-view-name*="repost"], button');
+    const buttons = [...item.querySelectorAll('button, [role="button"]')];
+    const button = buttons.find(candidate => {
+      const value = `${candidate.getAttribute('aria-label') || ''} ${candidate.getAttribute('data-view-name') || ''} ${candidate.textContent || ''}`.toLowerCase();
+      return /repost|reshare|republier|republication|reposten/.test(value);
+    });
     byId.set(id, {
       id,
       url: `https://www.linkedin.com/feed/update/urn:li:activity:${id}/`,
@@ -285,7 +289,7 @@ function extractCompanyPageFromDOM() {
       alreadyReposted: !!button && (
         button.getAttribute('aria-pressed') === 'true' ||
         button.classList.contains('react-button--active') ||
-        /undo repost|remove repost/i.test(button.getAttribute('aria-label') || button.textContent)
+        /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/i.test(button.getAttribute('aria-label') || button.textContent)
       )
     });
   });
@@ -342,13 +346,19 @@ async function clickAndConfirmRepost() {
     return !!box && box.width > 0 && box.height > 0 && getComputedStyle(item).visibility !== 'hidden' && getComputedStyle(item).display !== 'none';
   };
   const describe = item => `${item?.getAttribute?.('aria-label') || ''} ${item?.getAttribute?.('data-view-name') || ''} ${item?.textContent || ''}`.replace(/\s+/g, ' ').trim().toLowerCase();
+  const isRepostControl = value => /\brepost\b|\breshare\b|republier|republication|reposten/.test(value);
+  const isCommentShare = value => /with your thoughts|quote|ajouter (?:vos|mes) réflexions|avec (?:vos|mes) réflexions|avec un commentaire|gedanken hinzufügen|mit (?:ihren|deinen|eigenen) gedanken|mit kommentar/.test(value);
+  const isUndoRepost = value => /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/.test(value);
+  const isInstantRepost = value => /^(?:repost|reshare) instantly$|^republier (?:instantanément|maintenant)$|^(?:jetzt|sofort|direkt) reposten$|^reposten$/.test(value);
+  const isSuccessNotice = value => /repost successful|reposted|post shared|shared successfully|republication réussie|publication republiée|a été republié|erfolgreich repostet|beitrag (?:wurde )?repostet|repost erfolgreich/.test(value) && !/could not|error|failed|impossible|erreur|échec|fehlgeschlagen|fehler/.test(value);
+  const isViewRepost = value => /view repost|view reshare|voir la republication|republication anzeigen|repost anzeigen/.test(value);
   const controls = () => [...document.querySelectorAll('button, [role="button"], [data-view-name*="repost"], [data-view-name*="reshare"]')].filter(isVisible);
   const button = controls().find(item => {
     const value = describe(item);
-    return /\brepost\b|\breshare\b/.test(value) && !/with your thoughts|quote/.test(value);
+    return isRepostControl(value) && !isCommentShare(value);
   });
   if (!button) return { confirmed: false, detail: 'Repost button was not found in the visible LinkedIn post.' };
-  if (button.getAttribute('aria-pressed') === 'true' || /undo repost|remove repost/.test(describe(button))) return { confirmed: false, detail: 'Post was already reposted.' };
+  if (button.getAttribute('aria-pressed') === 'true' || isUndoRepost(describe(button))) return { confirmed: false, detail: 'Post was already reposted.' };
   const before = describe(button);
   button.scrollIntoView({ block: 'center', inline: 'center' });
   button.click();
@@ -363,8 +373,7 @@ async function clickAndConfirmRepost() {
         // LinkedIn's current popup uses role=button elements inside generic
         // containers, not its former role=menu/artdeco markup.  Match only the
         // exact visible direct-share action; never choose the thoughts/quote path.
-        const instant = /^(repost|reshare) instantly$/.test(value);
-        return instant && !/with your thoughts|quote/.test(value);
+        return isInstantRepost(value) && !isCommentShare(value);
       });
   }
   if (!action) return { confirmed: false, detail: "NexaShare opened the repost menu but could not identify LinkedIn's visible Repost instantly choice." };
@@ -373,11 +382,11 @@ async function clickAndConfirmRepost() {
 
   for (let attempt = 0; attempt < 12; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 500));
-    const current = controls().find(item => item === button || /\brepost\b|\breshare\b/.test(describe(item)));
-    const controlChanged = current && (current.getAttribute('aria-pressed') === 'true' || current.classList.contains('react-button--active') || /undo repost|remove repost/.test(describe(current)) || (current === button && describe(current) !== before));
+    const current = controls().find(item => item === button || isRepostControl(describe(item)));
+    const controlChanged = current && (current.getAttribute('aria-pressed') === 'true' || current.classList.contains('react-button--active') || isUndoRepost(describe(current)) || (current === button && describe(current) !== before));
     const notices = [...document.querySelectorAll('[role="alert"], [role="status"], .artdeco-toast-item, .artdeco-inline-feedback')].filter(isVisible);
-    const successNotice = notices.find(item => /repost successful|reposted|post shared|shared successfully/.test(describe(item)) && !/could not|error|failed/.test(describe(item)));
-    const viewRepost = successNotice && [...successNotice.querySelectorAll('a[href]')].find(link => /view repost|view reshare/.test(describe(link)));
+    const successNotice = notices.find(item => isSuccessNotice(describe(item)));
+    const viewRepost = successNotice && [...successNotice.querySelectorAll('a[href]')].find(link => isViewRepost(describe(link)));
     const repostUrl = viewRepost ? new URL(viewRepost.getAttribute('href'), location.origin).href : '';
     if (successNotice) return { confirmed: true, repostUrl, detail: repostUrl ? 'LinkedIn confirmed the repost and provided its View repost link.' : 'LinkedIn displayed a visible repost confirmation.' };
     if (controlChanged) return { confirmed: true, detail: 'LinkedIn visibly changed the repost control to its active state.' };
