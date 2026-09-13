@@ -251,10 +251,11 @@ assert.equal(adminReportWrongKey.status, 401);
 // The cron entrypoint must run both daily emails, not just the per-user one.
 const cronWorker = (await import('../src/worker.js')).default;
 let cronPromise;
-cronWorker.scheduled({}, env, { waitUntil(promise) { cronPromise = promise; } });
+cronWorker.scheduled({ scheduledTime: Date.parse('2026-09-14T06:00:00Z') }, env, { waitUntil(promise) { cronPromise = promise; } });
 assert.deepEqual(await cronPromise, [
   { sent: 0, skipped: 'resend_not_configured' },
-  { sent: 0, skipped: 'resend_not_configured', to: ['report@gershonconsulting.com'] }
+  { sent: 0, skipped: 'resend_not_configured', to: ['report@gershonconsulting.com'] },
+  { sent: 0, skipped: 'not_sunday' }
 ]);
 
 console.log('Worker and extension smoke checks passed.');
