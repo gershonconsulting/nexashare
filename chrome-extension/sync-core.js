@@ -6,6 +6,8 @@ const PAGE_LOAD_MS = 6000;
 const POST_DISCOVERY_ATTEMPTS = 16;
 const MAX_LOG_ENTRIES = 200;
 const DAILY_ALARM = 'dailyRepost';
+const EXTENSION_VERSION = chrome.runtime.getManifest().version;
+let activeSyncPromise = null;
 
 async function log(level, message, data) {
   const entry = { ts: new Date().toISOString(), level, msg: message, data: data === undefined ? null : data };
@@ -83,7 +85,16 @@ async function authenticatedFetch(path, options = {}) {
   return response.json();
 }
 
-async function runFullSync({ trigger = 'manual' } = {}) {
+function runFullSync(options = {}) {
+  if (activeSyncPromise) {
+    log('warn', 'run:already-active', { requestedTrigger: options.trigger || 'manual' });
+    return activeSyncPromise;
+  }
+  activeSyncPromise = runFullSyncUnlocked(options).finally(() => { activeSyncPromise = null; });
+  return activeSyncPromise;
+}
+
+async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
   await chrome.storage.local.set({ nexashareLog: [] });
   await log('info', 'run:start', { trigger });
   setBadge('â€¦', '#6b7280');
@@ -172,7 +183,7 @@ async function runFullSync({ trigger = 'manual' } = {}) {
         break;
       }
       if (!candidateHandled && !posts.some(post => post.alreadyReposted && !seen.has(post.id))) {
-        outcomes.push(makeCompanyOutcome(company, 'skipped', posts.length ? 'No new eligible posts were found.' : (scraped.notReady ? 'LinkedIn did not finish loading the posts in time. NexaShare will retry on the next sync.' : 'No posts were found on the company page.')));
+        outcomes.push(makeCompanyOutcome(company, scraped.notReady ? 'failed' : 'skipped', posts.length ? 'No new eligible posts were found.' : (scraped.notReady ? 'LinkedIn did not finish loading the posts after two fresh-tab attempts. NexaShare will retry automatically.' : 'No posts were found on the company page.')));
       }
       processedPostIds[sourceKey] = [...seen].slice(-500);
     } catch (error) {
@@ -188,7 +199,7 @@ async function runFullSync({ trigger = 'manual' } = {}) {
       await authenticatedFetch('/api/extension/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcomes })
+        body: JSON.stringify({ outcomes, trigger, extensionVersion: EXTENSION_VERSION })
       });
     }
     reported = true;
@@ -247,6 +258,17 @@ function sourceUrl(source) {
 }
 
 async function scrapeCompanyPosts(source) {
+  let lastResult = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    lastResult = await scrapeCompanyPostsOnce(source);
+    if (!lastResult.notReady) return lastResult;
+    await log('warn', 'company:load-retry', { company: source.name, attempt });
+    if (attempt < 2) await sleep(1500 * attempt);
+  }
+  return lastResult || { companyName: '', posts: [], notReady: true };
+}
+
+async function scrapeCompanyPostsOnce(source) {
   const url = sourceUrl(source);
   return withBackgroundTab(url, async tabId => {
     const loaded = await waitForLinkedInPosts(tabId);
@@ -351,15 +373,24 @@ function extractCompanyPageFromDOM() {
 async function repostContent(post) {
   await log('info', 'repost:attempt', { postId: post.id, url: post.url, inPlace: !!post.inPlace });
   if (post.inPlace) return repostOnSourcePage(post);
-  return withBackgroundTab(post.url, async tabId => {
-    const results = await chrome.scripting.executeScript({ target: { tabId }, func: clickAndConfirmRepost });
-    const result = results?.[0]?.result || { confirmed: false, detail: 'LinkedIn did not return an outcome.' };
+  let result;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    result = await withBackgroundTab(post.url, async tabId => {
+      const loaded = await waitForLinkedInPosts(tabId);
+      if (!loaded) return { confirmed: false, retryable: true, detail: 'LinkedIn did not finish loading the post.' };
+      const results = await chrome.scripting.executeScript({ target: { tabId }, func: clickAndConfirmRepost });
+      return results?.[0]?.result || { confirmed: false, retryable: true, detail: 'LinkedIn did not return an outcome.' };
+    });
+    if (result.confirmed || !result.retryable) break;
+    await log('warn', 'repost:fresh-tab-retry', { postId: post.id, attempt });
+    if (attempt < 2) await sleep(1500 * attempt);
+  }
+  result ||= { confirmed: false, detail: 'LinkedIn did not return an outcome after retry.' };
     if (result.confirmed && !result.repostUrl) {
       result.detail += ' LinkedIn confirmed the repost, but did not expose a View repost link to record.';
     }
     await log(result.confirmed ? 'info' : 'warn', result.confirmed ? 'repost:confirmed' : 'repost:not-confirmed', { postId: post.id, detail: result.detail });
     return result;
-  });
 }
 
 async function repostOnSourcePage(post) {
@@ -432,7 +463,7 @@ async function clickAndConfirmRepost() {
     const value = describe(item);
     return isRepostControl(value) && !isCommentShare(value);
   });
-  if (!button) return { confirmed: false, detail: 'Repost button was not found in the visible LinkedIn post.' };
+  if (!button) return { confirmed: false, retryable: true, detail: 'Repost button was not found in the visible LinkedIn post.' };
   if (button.getAttribute('aria-pressed') === 'true' || isUndoRepost(describe(button))) return { confirmed: false, detail: 'Post was already reposted.' };
   const before = describe(button);
   button.scrollIntoView({ block: 'center', inline: 'center' });
@@ -545,16 +576,29 @@ async function clickAndConfirmRepostInPlace(matchText) {
 async function withBackgroundTab(url, operation) {
   const tab = await chrome.tabs.create({ url, active: false });
   try {
-    await sleep(PAGE_LOAD_MS);
+    await waitForTabReady(tab.id);
     return await operation(tab.id);
   } finally {
     try { await chrome.tabs.remove(tab.id); } catch (error) {}
   }
 }
 
+async function waitForTabReady(tabId) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.status === 'complete') {
+      await sleep(1000);
+      return;
+    }
+    await sleep(500);
+  }
+  await sleep(PAGE_LOAD_MS);
+}
+
 function makeOutcome(company, post, status, detail, repostUrl = '') {
   const timestamp = new Date().toISOString();
   return {
+    outcomeId: crypto.randomUUID(),
     companyName: company.name,
     postUrl: post.url,
     repostUrl: repostUrl || '',
@@ -568,6 +612,7 @@ function makeOutcome(company, post, status, detail, repostUrl = '') {
 
 function makeCompanyOutcome(company, status, detail) {
   return {
+    outcomeId: crypto.randomUUID(),
     companyName: company.name,
     postUrl: company.sourceType === 'person'
       ? `https://www.linkedin.com/in/${company.vanity}/recent-activity/all/`

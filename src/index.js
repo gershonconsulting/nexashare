@@ -7,7 +7,7 @@ const LINKEDIN_REDIRECT_URI = `${APP_ORIGIN}/api/auth/callback`;
 const LINKEDIN_SCOPES = 'openid profile email';
 const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00';
 const SETUP_REMINDER_TYPE = 'missing_company_after_connection';
-const CURRENT_EXTENSION_VERSION = '1.2.18';
+const CURRENT_EXTENSION_VERSION = '1.2.19';
 const SETUP_REMINDER_FROM = 'NexaShare <hello@nexashare.com>';
 const DAILY_REPORT_TYPE = 'daily_repost_report';
 const REGISTRATION_NOTIFICATION_FROM = SETUP_REMINDER_FROM;
@@ -557,17 +557,20 @@ async function handleAPI(request, env, ctx) {
       const status = allowed.includes(outcome.status) ? outcome.status : 'failed';
       const postUrl = String(outcome.postUrl || '').slice(0, 1000);
       if (!postUrl.startsWith('https://www.linkedin.com/')) continue;
-      await env.DB.prepare(
-        `INSERT INTO reposts
-         (user_id, team_id, original_post_url, repost_url, post_text, status, company_name, detail, attempted_at, confirmed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      const outcomeId = typeof outcome.outcomeId === 'string' ? outcome.outcomeId.slice(0, 100) : null;
+      const inserted = await env.DB.prepare(
+        `INSERT OR IGNORE INTO reposts
+         (user_id, team_id, original_post_url, repost_url, post_text, status, company_name, detail, attempted_at, confirmed_at, outcome_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         user.id, user.team_id, postUrl,
         typeof outcome.repostUrl === 'string' && outcome.repostUrl.startsWith('https://www.linkedin.com/') ? outcome.repostUrl.slice(0, 1000) : null,
         String(outcome.postTextSnippet || '').slice(0, 500),
         status, String(outcome.companyName || '').slice(0, 100), String(outcome.detail || '').slice(0, 500),
-        outcome.attemptedAt || new Date().toISOString(), status === 'confirmed' ? (outcome.confirmedAt || new Date().toISOString()) : null
+        outcome.attemptedAt || new Date().toISOString(), status === 'confirmed' ? (outcome.confirmedAt || new Date().toISOString()) : null,
+        outcomeId
       ).run();
+      if (!inserted.meta?.changes) continue;
       await recordDeliveryOutcome(env.DB, {
         teamId: user.team_id,
         userId: user.id,
