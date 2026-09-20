@@ -2,10 +2,14 @@ const API_BASE = 'https://nexashare.com';
 const MAX_SCROLL_ATTEMPTS = 5;
 const SCROLL_DELAY_MS = 2000;
 const REPOST_DELAY_MS = 3000;
+const SOURCE_DELAY_MS = 5000;
 const PAGE_LOAD_MS = 6000;
 const POST_DISCOVERY_ATTEMPTS = 16;
 const MAX_LOG_ENTRIES = 200;
 const DAILY_ALARM = 'dailyRepost';
+const RETRY_ALARM = 'retryRepost';
+const RETRY_DELAYS_MINUTES = [5, 20, 60];
+const CIRCUIT_BREAKER_THRESHOLD = 3;
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 let activeSyncPromise = null;
 
@@ -24,8 +28,9 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onStartup.addListener(ensureDailyAlarm);
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === DAILY_ALARM) {
-    runFullSync({ trigger: 'scheduled' }).catch(error => log('error', 'scheduled-run:failed', { error: String(error) }));
+  if (alarm.name === DAILY_ALARM || alarm.name === RETRY_ALARM) {
+    const trigger = alarm.name === RETRY_ALARM ? 'automatic-retry' : 'scheduled';
+    runFullSync({ trigger }).catch(error => log('error', 'scheduled-run:failed', { error: String(error), trigger }));
   }
 });
 
@@ -137,6 +142,9 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
   const dedupeStore = await chrome.storage.local.get('processedPostIds');
   const processedPostIds = dedupeStore.processedPostIds || {};
   const enabledCompanies = companies.filter(item => item.enabled !== 0);
+  let consecutiveDiscoveryFailures = 0;
+  let discoveryFailureReason = '';
+  let circuitOpened = false;
   if (!enabledCompanies.length) {
     for (const company of companies) outcomes.push(makeCompanyOutcome(company, 'skipped', 'Automatic reposting is paused for this company.'));
   }
@@ -144,6 +152,14 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
     try {
       const scraped = await scrapeCompanyPosts(company);
       const posts = scraped.posts;
+      if (scraped.notReady) {
+        const reason = scraped.reason || 'linkedin_layout_unrecognized';
+        consecutiveDiscoveryFailures = reason === discoveryFailureReason ? consecutiveDiscoveryFailures + 1 : 1;
+        discoveryFailureReason = reason;
+      } else {
+        consecutiveDiscoveryFailures = 0;
+        discoveryFailureReason = '';
+      }
       if (scraped.companyName && scraped.companyName !== company.name) {
         await authenticatedFetch(`/api/${company.sourceType === 'person' ? 'people' : 'companies'}/${company.id}`, {
           method: 'PATCH',
@@ -183,14 +199,22 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
         break;
       }
       if (!candidateHandled && !posts.some(post => post.alreadyReposted && !seen.has(post.id))) {
-        outcomes.push(makeCompanyOutcome(company, scraped.notReady ? 'failed' : 'skipped', posts.length ? 'No new eligible posts were found.' : (scraped.notReady ? 'LinkedIn did not finish loading the posts after two fresh-tab attempts. NexaShare will retry automatically.' : 'No posts were found on the company page.')));
+        outcomes.push(makeCompanyOutcome(company, scraped.notReady ? 'failed' : 'skipped', posts.length ? 'No new eligible posts were found.' : (scraped.notReady ? discoveryFailureDetail(scraped.reason) : 'No posts were found on the company page.')));
       }
       processedPostIds[sourceKey] = [...seen].slice(-500);
+      if (consecutiveDiscoveryFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+        circuitOpened = true;
+        await log('error', 'linkedin-discovery:circuit-open', { reason: discoveryFailureReason, consecutiveFailures: consecutiveDiscoveryFailures, remainingSources: enabledCompanies.length - enabledCompanies.indexOf(company) - 1 });
+        break;
+      }
     } catch (error) {
       await log('error', 'company:failed', { company: company.name, error: String(error) });
       outcomes.push(makeCompanyOutcome(company, 'failed', String(error)));
     }
+    await sleep(SOURCE_DELAY_MS + Math.random() * 5000);
   }
+  if (circuitOpened) await scheduleAutomaticRetry(trigger, discoveryFailureReason);
+  else await resetAutomaticRetry();
   await chrome.storage.local.set({ processedPostIds });
 
   let reported = false;
@@ -218,7 +242,9 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
     totalConfirmed: outcomes.filter(item => item.status === 'confirmed').length,
     totalFailed: outcomes.filter(item => item.status === 'failed').length,
     totalAlreadyReposted: outcomes.filter(item => item.status === 'already_reposted').length,
-    retriedOutcomes: priorPendingCount
+    retriedOutcomes: priorPendingCount,
+    circuitOpened,
+    discoveryFailureReason
   };
   await chrome.storage.local.set({ lastSyncResult: result });
   await log('info', 'run:done', result);
@@ -257,6 +283,38 @@ function sourceUrl(source) {
     : `https://www.linkedin.com/company/${source.vanity}/posts/?feedView=all&viewAsMember=true`;
 }
 
+function discoveryFailureDetail(reason) {
+  const details = {
+    linkedin_login_required: 'LinkedIn signed the browser out while NexaShare was running. Sign in again; the remaining sources were preserved.',
+    linkedin_checkpoint: 'LinkedIn displayed a security checkpoint. Complete it in LinkedIn; the remaining sources were preserved.',
+    linkedin_rate_limited: 'LinkedIn temporarily limited page loading. NexaShare stopped the batch and scheduled a controlled retry.',
+    linkedin_admin_redirect: 'LinkedIn redirected the company feed to its admin dashboard. NexaShare will retry using member view.',
+    linkedin_empty_feed: 'LinkedIn loaded the source page but did not expose any posts.',
+    linkedin_tab_closed: 'The LinkedIn tab closed before NexaShare finished. NexaShare scheduled a controlled retry.',
+    linkedin_layout_unrecognized: 'LinkedIn loaded, but its post-card layout was not recognized. NexaShare stopped the batch to avoid repeated failures and scheduled a controlled retry.'
+  };
+  return details[reason] || details.linkedin_layout_unrecognized;
+}
+
+async function scheduleAutomaticRetry(trigger, reason) {
+  const stored = await chrome.storage.local.get('automaticRetryCount');
+  const previous = trigger === 'manual' ? 0 : Number(stored.automaticRetryCount || 0);
+  const retryIndex = Math.min(previous, RETRY_DELAYS_MINUTES.length - 1);
+  if (previous >= RETRY_DELAYS_MINUTES.length) {
+    await log('error', 'automatic-retry:exhausted', { reason, attempts: previous });
+    return;
+  }
+  const delayInMinutes = RETRY_DELAYS_MINUTES[retryIndex];
+  await chrome.storage.local.set({ automaticRetryCount: previous + 1 });
+  chrome.alarms.create(RETRY_ALARM, { delayInMinutes });
+  await log('warn', 'automatic-retry:scheduled', { reason, attempt: previous + 1, delayInMinutes });
+}
+
+async function resetAutomaticRetry() {
+  await chrome.storage.local.set({ automaticRetryCount: 0 });
+  await chrome.alarms.clear(RETRY_ALARM);
+}
+
 async function scrapeCompanyPosts(source) {
   let lastResult = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -265,14 +323,14 @@ async function scrapeCompanyPosts(source) {
     await log('warn', 'company:load-retry', { company: source.name, attempt });
     if (attempt < 2) await sleep(1500 * attempt);
   }
-  return lastResult || { companyName: '', posts: [], notReady: true };
+  return lastResult || { companyName: '', posts: [], notReady: true, reason: 'linkedin_layout_unrecognized' };
 }
 
 async function scrapeCompanyPostsOnce(source) {
   const url = sourceUrl(source);
   return withBackgroundTab(url, async tabId => {
-    const loaded = await waitForLinkedInPosts(tabId);
-    if (!loaded) return { companyName: '', posts: [], notReady: true };
+    const readiness = await waitForLinkedInPosts(tabId);
+    if (!readiness.ready) return { companyName: '', posts: [], notReady: true, reason: readiness.reason };
     for (let index = 0; index < MAX_SCROLL_ATTEMPTS; index++) {
       await chrome.scripting.executeScript({ target: { tabId }, func: () => window.scrollBy(0, 1500) });
       await sleep(SCROLL_DELAY_MS);
@@ -284,14 +342,45 @@ async function scrapeCompanyPostsOnce(source) {
 
 async function waitForLinkedInPosts(tabId) {
   for (let attempt = 0; attempt < POST_DISCOVERY_ATTEMPTS; attempt++) {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], [aria-label^="Open control menu for post by"]').length
-    });
-    if (Number(results?.[0]?.result) > 0) return true;
+    let results;
+    try {
+      results = await chrome.scripting.executeScript({ target: { tabId }, func: inspectLinkedInPage });
+    } catch (error) {
+      if (/No tab with id/i.test(String(error))) return { ready: false, reason: 'linkedin_tab_closed' };
+      throw error;
+    }
+    const state = results?.[0]?.result;
+    if (state?.ready) return state;
+    if (state?.terminal) return state;
     await sleep(1250);
   }
-  return false;
+  try {
+    const results = await chrome.scripting.executeScript({ target: { tabId }, func: inspectLinkedInPage, args: [true] });
+    return results?.[0]?.result || { ready: false, reason: 'linkedin_layout_unrecognized' };
+  } catch (error) {
+    return { ready: false, reason: /No tab with id/i.test(String(error)) ? 'linkedin_tab_closed' : 'linkedin_layout_unrecognized' };
+  }
+}
+
+function inspectLinkedInPage(finalAttempt = false) {
+  const path = location.pathname.toLowerCase();
+  const pageText = (document.body?.innerText || '').slice(0, 12000).toLowerCase();
+  if (/\/login|\/uas\/login/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_login_required' };
+  if (/\/checkpoint|\/challenge/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_checkpoint' };
+  if (/\/admin\/dashboard/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_admin_redirect' };
+  if (/too many requests|temporarily restricted|try again later|réessayez plus tard|versuche es später erneut/.test(pageText)) {
+    return { ready: false, terminal: true, reason: 'linkedin_rate_limited' };
+  }
+  const legacyCards = document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], [data-view-name="feed-full-update"]');
+  const controls = [...document.querySelectorAll('button, [role="button"]')];
+  const repostPattern = /repost|reshare|republier|republication|reposter|reposten|teilen|erneut teilen|volver a publicar|compartir de nuevo|ripubblica|ricondividi/i;
+  const repostControls = controls.filter(control => repostPattern.test(`${control.getAttribute('aria-label') || ''} ${control.getAttribute('data-view-name') || ''} ${control.textContent || ''}`));
+  if (legacyCards.length || repostControls.length) return { ready: true, reason: '' };
+  const signedIn = !!document.querySelector('#global-nav, .global-nav__me, a[href*="/in/"]');
+  if (!finalAttempt) return { ready: false, reason: '' };
+  if (!signedIn) return { ready: false, reason: 'linkedin_login_required' };
+  if (/no posts|aucune publication|keine beiträge|sin publicaciones/i.test(pageText)) return { ready: false, reason: 'linkedin_empty_feed' };
+  return { ready: false, reason: 'linkedin_layout_unrecognized' };
 }
 
 function extractCompanyPageFromDOM() {
@@ -330,15 +419,19 @@ function extractCompanyPageFromDOM() {
       for (let i = 0; i < value.length; i++) h = ((h * 33) ^ value.charCodeAt(i)) >>> 0;
       return `t${h.toString(36)}`;
     };
-    const anchors = [...document.querySelectorAll('[aria-label]')]
-      .filter(node => /^Open control menu for post by /i.test(node.getAttribute('aria-label') || ''));
-    for (const anchor of anchors) {
-      let node = anchor;
+    const repostPattern = /repost|reshare|republier|republication|reposter|reposten|teilen|erneut teilen|volver a publicar|compartir de nuevo|ripubblica|ricondividi/i;
+    const isRepostControl = node => repostPattern.test(`${node.getAttribute('aria-label') || ''} ${node.getAttribute('data-view-name') || ''} ${node.textContent || ''}`);
+    const controls = [...document.querySelectorAll('button, [role="button"]')].filter(isRepostControl);
+    for (const control of controls) {
+      let node = control;
       let card = null;
       for (let depth = 0; depth < 12 && node; depth++) {
         node = node.parentElement;
-        if (node && [...node.querySelectorAll('button, [role="button"]')]
-          .some(control => /^repost$/i.test((control.getAttribute('aria-label') || '').trim()))) { card = node; break; }
+        if (!node) break;
+        const nestedRepostControls = [...node.querySelectorAll('button, [role="button"]')].filter(isRepostControl);
+        const textLength = (node.innerText || '').replace(/\s+/g, ' ').trim().length;
+        if (nestedRepostControls.length === 1 && textLength >= 40) card = node;
+        if (nestedRepostControls.length > 1) break;
       }
       if (!card) continue;
       const cardText = (card.innerText || '').replace(/\s+/g, ' ').replace(/^Feed post\s*/i, '').trim();
@@ -348,17 +441,16 @@ function extractCompanyPageFromDOM() {
       const matchText = bodyText.slice(0, 240);
       const id = hashText(matchText);
       if (byId.has(id)) continue;
-      const control = [...card.querySelectorAll('button, [role="button"]')]
-        .find(item => /^repost$/i.test((item.getAttribute('aria-label') || '').trim()));
+      const cardControl = [...card.querySelectorAll('button, [role="button"]')].find(isRepostControl);
       byId.set(id, {
         id,
         url: location.href.split('#')[0],
         inPlace: true,
         matchText,
         text: bodyText.slice(0, 1200),
-        alreadyReposted: !!control && (
-          control.getAttribute('aria-pressed') === 'true' ||
-          /undo repost|remove repost|annuler la republication|supprimer la republication/i.test(control.getAttribute('aria-label') || '')
+        alreadyReposted: !!cardControl && (
+          cardControl.getAttribute('aria-pressed') === 'true' ||
+          /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/i.test(cardControl.getAttribute('aria-label') || '')
         )
       });
     }
@@ -376,8 +468,8 @@ async function repostContent(post) {
   let result;
   for (let attempt = 1; attempt <= 2; attempt++) {
     result = await withBackgroundTab(post.url, async tabId => {
-      const loaded = await waitForLinkedInPosts(tabId);
-      if (!loaded) return { confirmed: false, retryable: true, detail: 'LinkedIn did not finish loading the post.' };
+      const readiness = await waitForLinkedInPosts(tabId);
+      if (!readiness.ready) return { confirmed: false, retryable: true, detail: discoveryFailureDetail(readiness.reason) };
       const results = await chrome.scripting.executeScript({ target: { tabId }, func: clickAndConfirmRepost });
       return results?.[0]?.result || { confirmed: false, retryable: true, detail: 'LinkedIn did not return an outcome.' };
     });
@@ -585,7 +677,9 @@ async function withBackgroundTab(url, operation) {
 
 async function waitForTabReady(tabId) {
   for (let attempt = 0; attempt < 30; attempt++) {
-    const tab = await chrome.tabs.get(tabId);
+    let tab;
+    try { tab = await chrome.tabs.get(tabId); }
+    catch (error) { throw new Error(`LinkedIn tab closed before it became ready: ${String(error)}`); }
     if (tab.status === 'complete') {
       await sleep(1000);
       return;

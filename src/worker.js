@@ -4,7 +4,7 @@ import { sendSundayReports } from './weekly-report.js';
 
 const APP_ORIGIN = 'https://nexashare.com';
 const DAILY_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
-export const CURRENT_EXTENSION_VERSION = '1.2.19';
+export const CURRENT_EXTENSION_VERSION = '1.2.20';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({
