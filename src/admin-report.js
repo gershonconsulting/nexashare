@@ -7,10 +7,12 @@
 // Subject convention (Gershon platform reports):
 //   "NexaShare Extension Report — September 3, 2026"
 
+import { DEFAULT_REPORT_RECIPIENT, readReportRecipient } from './report-settings.js';
+
 const APP_ORIGIN = 'https://nexashare.com';
 
 export const ADMIN_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
-export const ADMIN_REPORT_TO = 'report@gershonconsulting.com';
+export const ADMIN_REPORT_TO = DEFAULT_REPORT_RECIPIENT;
 
 const REPOST_STATUSES = ['confirmed', 'failed', 'skipped', 'already_reposted'];
 
@@ -26,14 +28,6 @@ function escapeHtml(value) {
 
 function humanStatus(status) {
   return String(status || 'unknown').replaceAll('_', ' ');
-}
-
-export function reportRecipients(env) {
-  const configured = String(env?.ADMIN_REPORT_TO || ADMIN_REPORT_TO)
-    .split(',')
-    .map(address => address.trim())
-    .filter(Boolean);
-  return configured.length ? configured : [ADMIN_REPORT_TO];
 }
 
 export function formatReportDate(date) {
@@ -386,7 +380,13 @@ async function alreadySentToday(db) {
 }
 
 export async function sendAdminDailyReport(env, options = {}) {
-  const recipients = reportRecipients(env);
+  const recipientSetting = await readReportRecipient(env);
+  const recipients = recipientSetting.email ? [recipientSetting.email] : [];
+
+  if (!recipients.length) {
+    console.error('Admin daily report skipped: report recipient is invalid or unset.', { error: recipientSetting.error });
+    return { sent: 0, skipped: 'report_recipient_not_configured', to: [] };
+  }
 
   if (!env.RESEND_API_KEY) {
     console.log('Admin daily report skipped: RESEND_API_KEY is not configured.');

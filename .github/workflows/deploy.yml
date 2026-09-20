@@ -37,6 +37,9 @@ jobs:
       - name: Run weekly report checks
         run: node tests/weekly-report.test.mjs
 
+      - name: Run report settings checks
+        run: node tests/report-settings.test.mjs
+
       - name: Run delivery engine checks
         run: node tests/delivery-engine.test.mjs
 
@@ -46,6 +49,7 @@ jobs:
           node --check src/worker.js
           node --check src/admin-report.js
           node --check src/weekly-report.js
+          node --check src/report-settings.js
           node --check chrome-extension/sync-core.js
           node --check chrome-extension/content.js
           node --check chrome-extension/popup.js

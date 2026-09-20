@@ -1,5 +1,6 @@
 import { getCampaignHealth, markDeliveryProcessing, recordDeliveryOutcome } from './delivery-engine.js';
-import { buildAdminReportEmail, collectAdminReportData, reportRecipients, sendAdminDailyReport } from './admin-report.js';
+import { buildAdminReportEmail, collectAdminReportData, sendAdminDailyReport } from './admin-report.js';
+import { readReportRecipient, saveReportRecipient } from './report-settings.js';
 
 const LINKEDIN_CLIENT_ID = '78dsjq2rbcv26t';
 const APP_ORIGIN = 'https://nexashare.com';
@@ -359,6 +360,7 @@ async function handleAPI(request, env, ctx) {
   if (url.pathname === '/api/health' && request.method === 'GET') {
     try {
       await env.DB.prepare('SELECT 1 AS ok').first();
+      const reportRecipient = await readReportRecipient(env);
       return jsonResponse({
         status: 'ready',
         database: 'connected',
@@ -367,8 +369,9 @@ async function handleAPI(request, env, ctx) {
         registration_notification: env.RESEND_API_KEY && env.REGISTRATION_NOTIFICATION_TO ? 'configured' : 'not_configured',
         daily_repost_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         current_extension_version: CURRENT_EXTENSION_VERSION,
-        admin_daily_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
-        admin_report_recipient: reportRecipients(env).join(', '),
+        admin_daily_report: env.RESEND_API_KEY && reportRecipient.email ? 'configured' : 'not_configured',
+        admin_report_recipient: reportRecipient.email,
+        admin_report_recipient_source: reportRecipient.source,
         canonical_origin: APP_ORIGIN,
         checked_at: new Date().toISOString()
       });
@@ -381,8 +384,9 @@ async function handleAPI(request, env, ctx) {
         registration_notification: env.RESEND_API_KEY && env.REGISTRATION_NOTIFICATION_TO ? 'configured' : 'not_configured',
         daily_repost_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         current_extension_version: CURRENT_EXTENSION_VERSION,
-        admin_daily_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
-        admin_report_recipient: reportRecipients(env).join(', '),
+        admin_daily_report: 'not_configured',
+        admin_report_recipient: null,
+        admin_report_recipient_source: 'unavailable',
         canonical_origin: APP_ORIGIN,
         checked_at: new Date().toISOString()
       }, 503);
@@ -454,6 +458,35 @@ async function handleAPI(request, env, ctx) {
        ON CONFLICT(team_id, vanity) DO UPDATE SET name = excluded.name, enabled = 1`
     ).bind(user.team_id, vanity, name).run();
     return jsonResponse({ success: true }, 201);
+  }
+
+  if (url.pathname === '/api/admin/report-settings') {
+    const user = await getUser(request, env);
+    if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
+    if (user.role !== 'admin') return jsonResponse({ error: 'Administrator access required' }, 403);
+
+    if (request.method === 'GET') {
+      const setting = await readReportRecipient(env);
+      return jsonResponse({
+        recipient_email: setting.email,
+        source: setting.source,
+        updated_at: setting.updatedAt,
+        valid: Boolean(setting.email)
+      });
+    }
+
+    if (request.method === 'PUT') {
+      const body = await request.json().catch(() => ({}));
+      try {
+        const saved = await saveReportRecipient(env, body.recipient_email, user.id);
+        return jsonResponse({ recipient_email: saved.email, valid: true });
+      } catch (error) {
+        if (error?.code === 'invalid_report_recipient') return jsonResponse({ error: error.message }, 400);
+        throw error;
+      }
+    }
+
+    return jsonResponse({ error: 'Method not allowed' }, 405);
   }
 
   if (url.pathname === '/api/people' && request.method === 'GET') {
@@ -680,12 +713,14 @@ async function handleAPI(request, env, ctx) {
 
     if (request.method === 'POST') {
       const result = await sendAdminDailyReport(env, { force: url.searchParams.get('force') === '1' });
-      return jsonResponse({ recipient: reportRecipients(env), ...result });
+      return jsonResponse(result);
     }
 
     if (request.method === 'GET') {
+      const reportRecipient = await readReportRecipient(env);
+      if (!reportRecipient.email) return jsonResponse({ error: 'Report recipient is invalid or unset' }, 503);
       const data = await collectAdminReportData(env.DB);
-      const preview = buildAdminReportEmail(data, { to: reportRecipients(env)[0] });
+      const preview = buildAdminReportEmail(data, { to: reportRecipient.email });
       if (url.searchParams.get('format') === 'html') {
         return new Response(preview.html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
       }

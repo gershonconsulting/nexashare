@@ -4,7 +4,6 @@ import {
   buildAdminReportEmail,
   collectAdminReportData,
   formatReportDate,
-  reportRecipients,
   sendAdminDailyReport
 } from '../src/admin-report.js';
 
@@ -126,12 +125,6 @@ const hostileEmail = buildAdminReportEmail(hostile);
 assert.ok(!hostileEmail.html.includes('<script>alert(1)</script>'));
 assert.match(hostileEmail.html, /&lt;script&gt;/);
 
-// --- recipients -------------------------------------------------------------
-assert.deepEqual(reportRecipients({}), ['report@gershonconsulting.com']);
-assert.deepEqual(
-  reportRecipients({ ADMIN_REPORT_TO: 'report@gershonconsulting.com, olivier@gershonconsulting.com' }),
-  ['report@gershonconsulting.com', 'olivier@gershonconsulting.com']
-);
 assert.equal(formatReportDate(new Date('2026-12-01T23:30:00Z')), 'December 1, 2026');
 
 // --- sending ----------------------------------------------------------------
@@ -160,6 +153,22 @@ assert.equal(sentPayload.body.from, 'NexaShare <nexashare@gershon.ai>');
 assert.match(sentPayload.body.subject, /^NexaShare Extension Report — /);
 assert.ok(sentPayload.body.html.length > 500);
 assert.ok(runStatements.some(sql => sql.includes('INSERT INTO admin_daily_reports')), 'the send must be recorded');
+
+// Daily administrator delivery follows the persisted setting, not a hard-coded mailbox.
+sentPayload = null;
+const configuredRecipient = await sendAdminDailyReport({
+  RESEND_API_KEY: 'test-key',
+  DB: fakeDb([{ match: 'FROM report_settings', rows: [{ recipient_email: 'daily-ops@example.com' }] }, ...fixtures])
+}, { force: true });
+assert.equal(configuredRecipient.sent, 1);
+assert.deepEqual(sentPayload.body.to, ['daily-ops@example.com']);
+
+// A malformed stored value pauses the admin report instead of falling back silently.
+const invalidRecipient = await sendAdminDailyReport({
+  RESEND_API_KEY: 'test-key',
+  DB: fakeDb([{ match: 'FROM report_settings', rows: [{ recipient_email: 'broken-address' }] }])
+});
+assert.deepEqual(invalidRecipient, { sent: 0, skipped: 'report_recipient_not_configured', to: [] });
 
 // A provider failure is reported, recorded, and never thrown at the cron.
 globalThis.fetch = async () => new Response(JSON.stringify({ message: 'domain not verified' }), { status: 403 });

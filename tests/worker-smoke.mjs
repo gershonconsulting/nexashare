@@ -37,8 +37,9 @@ const healthyEnv = {
   ...env,
   DB: {
     prepare(sql) {
-      assert.equal(sql, 'SELECT 1 AS ok');
-      return { first: async () => ({ ok: 1 }) };
+      if (sql === 'SELECT 1 AS ok') return { first: async () => ({ ok: 1 }) };
+      if (sql.includes('FROM report_settings')) return { first: async () => null };
+      throw new Error(`Unexpected health query: ${sql}`);
     }
   }
 };
@@ -224,6 +225,10 @@ assert.match(reportSignalsMigration, /CREATE TABLE IF NOT EXISTS extension_runs/
 // `trigger` is reserved in SQLite - the column must be trigger_source.
 assert.doesNotMatch(reportSignalsMigration, /\btrigger TEXT/);
 
+const reportSettingsMigration = await readFile(new URL('../migrations/0010_report_settings.sql', import.meta.url), 'utf8');
+assert.match(reportSettingsMigration, /CREATE TABLE IF NOT EXISTS report_settings/);
+assert.match(reportSettingsMigration, /report@gershonconsulting\.com/);
+
 const reportSource = await readFile(new URL('../src/worker.js', import.meta.url), 'utf8');
 assert.match(reportSource, /CURRENT_EXTENSION_VERSION = '1\.2\.20'/);
 assert.match(reportSource, /THE DAILY JOB DID NOT RUN/);
@@ -244,6 +249,9 @@ assert.match(dashboardSource, /\/api\/extension\/seen/);
 // --- platform-wide extension report -----------------------------------------
 assert.equal(healthBody.admin_daily_report, 'not_configured');
 assert.equal(healthBody.admin_report_recipient, 'report@gershonconsulting.com');
+assert.equal(healthBody.admin_report_recipient_source, 'migration_default');
+assert.match(dashboardSource, /\/api\/admin\/report-settings/);
+assert.match(dashboardSource, /daily, weekly, and monthly reports/);
 
 // The admin endpoint stays invisible until ADMIN_REPORT_KEY is set...
 const adminReportUnconfigured = await worker.fetch(new Request('https://nexashare.com/api/admin/daily-report'), env);

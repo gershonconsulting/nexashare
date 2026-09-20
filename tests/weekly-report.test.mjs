@@ -44,6 +44,7 @@ const db = {
         throw new Error(`Unexpected all query: ${sql}`);
       },
       async first() {
+        if (sql.includes('FROM report_settings')) return { recipient_email: 'operations@example.com', updated_at: '2026-09-13 05:00:00' };
         if (sql.includes('SUM(CASE')) return activity;
         if (sql.includes('COUNT(DISTINCT')) return { days: 7 };
         if (sql.includes('FROM extension_tokens')) return { extension_version: current, last_seen_at: activity.lastSeenAt };
@@ -56,8 +57,11 @@ const sundayResult = await sendSundayReports({ DB: db, RESEND_API_KEY: 'test' },
 assert.deepEqual(sundayResult, { userReportsSent: 1, adminReportSent: 1, failed: 0, eligibleUsers: 1 });
 assert.equal(sent.length, 2);
 assert.equal(sent[0].body.to[0], user.email);
-assert.equal(sent[1].body.to[0], 'report@gershonconsulting.com');
+assert.equal(sent[1].body.to[0], 'operations@example.com');
 assert.match(sent[0].headers['Idempotency-Key'], /nexashare-weekly-user-1/);
+const mondayResult = await sendSundayReports({ DB: db, RESEND_API_KEY: 'test' }, current, { date: new Date('2026-09-14T06:00:00Z') });
+assert.deepEqual(mondayResult, { sent: 0, skipped: 'not_sunday' });
+assert.equal(sent.length, 2, 'the weekly schedule must not send on Monday');
 globalThis.fetch = originalFetch;
 
 console.log('Weekly report tests passed');

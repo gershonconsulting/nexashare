@@ -1,6 +1,8 @@
+import { DEFAULT_REPORT_RECIPIENT, readReportRecipient } from './report-settings.js';
+
 const APP_ORIGIN = 'https://nexashare.com';
 const REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
-const ADMIN_REPORT_TO = 'report@gershonconsulting.com';
+const ADMIN_REPORT_TO = DEFAULT_REPORT_RECIPIENT;
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({
@@ -139,8 +141,13 @@ export async function sendSundayReports(env, currentVersion, options = {}) {
       console.error('Weekly user report failed', { userId: user.id, message: error?.message });
     }
   }
-  const adminTo = String(env.ADMIN_REPORT_TO || ADMIN_REPORT_TO).split(',')[0].trim() || ADMIN_REPORT_TO;
+  const recipientSetting = await readReportRecipient(env);
+  const adminTo = recipientSetting.email;
   let adminReportSent = 0;
+  if (!adminTo) {
+    console.error('Weekly administrator report skipped: report recipient is invalid or unset.', { error: recipientSetting.error });
+    return { userReportsSent, adminReportSent, failed: failed + 1, eligibleUsers: users.length, adminSkipped: 'report_recipient_not_configured' };
+  }
   try {
     await sendWithResend(env, buildWeeklyAdminEmail(adminRows, currentVersion, date, adminTo), `nexashare-weekly-admin-${key}`);
     adminReportSent = 1;

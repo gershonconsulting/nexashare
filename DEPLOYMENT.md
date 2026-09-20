@@ -46,7 +46,8 @@ The Cloudflare account must contain:
 - Worker secret: `RESEND_API_KEY`
 - Worker secret: `REGISTRATION_NOTIFICATION_TO` (the email address that receives
   each new-user alert)
-- Optional Worker variable: `ADMIN_REPORT_TO` (overrides the daily extension
+- Legacy optional Worker variable: `ADMIN_REPORT_TO` (used only before the
+  persisted report setting is available during migration)
   report recipient; defaults to `report@gershonconsulting.com`)
 - Optional Worker secret: `ADMIN_REPORT_KEY` (unlocks the on-demand report
   endpoint; the endpoint returns 404 while it is unset)
@@ -155,6 +156,13 @@ installs silent for 7 days, no source enabled).
 `migrations/0008_admin_daily_reports.sql` adds `admin_daily_reports`, which
 records every send and guarantees one report per day even if the cron fires
 twice.
+
+`migrations/0010_report_settings.sql` adds the single persisted recipient used
+by platform-level daily and weekly reports, and by the monthly cadence when it
+is added. It seeds `report@gershonconsulting.com`, preserving existing delivery.
+Administrators can update the address under Dashboard → Settings → Report
+delivery. An invalid stored address pauses administrator reports instead of
+falling back silently.
 
 Checking and triggering it by hand (requires `ADMIN_REPORT_KEY`):
 
