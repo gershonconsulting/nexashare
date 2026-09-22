@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>All Users Progress — NexaShare</title>
+<style>
+:root{--ink:#101828;--muted:#667085;--line:#eaecf0;--bg:#faf9ff;--card:#fff;--brand:#7C3AED;--brand-soft:#f5f3ff;--ok:#067647;--ok-bg:#ecfdf3;--bad:#b42318;--bad-bg:#fef3f2;--warn:#b54708;--warn-bg:#fffaeb;--c-conf:#7C3AED;--c-fail:#e5484d;--c-skip:#cbd5e1}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 28px;background:#fff;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px}.mark{width:32px;height:32px;border-radius:9px;background:var(--brand);color:#fff;display:grid;place-items:center}
+header a{color:var(--brand);text-decoration:none;font-weight:600;font-size:14px}
+main{max-width:1280px;margin:0 auto;padding:24px 28px 60px}
+h1{font-size:24px;margin:0 0 4px}.sub{color:var(--muted);font-size:14px;margin:0}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}.seg button{border:0;background:none;padding:8px 14px;font:inherit;font-size:14px;cursor:pointer;color:var(--muted)}.seg button.on{background:var(--brand);color:#fff}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}.tile .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.tile .v{font-size:28px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}.tile .d{font-size:13px;margin-top:4px;color:var(--muted)}
+.up{color:var(--ok)}.down{color:var(--bad)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:18px}
+.card h2{font-size:16px;margin:0 0 4px}.legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin:6px 0 10px;flex-wrap:wrap}.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.chart{width:100%;height:auto;display:block}.chart text{font-size:11px;fill:var(--muted)}
+.tip{position:fixed;pointer-events:none;background:#101828;color:#fff;font-size:12px;padding:8px 10px;border-radius:8px;display:none;z-index:9;line-height:1.5;white-space:nowrap}
+table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;padding:10px 8px;border-bottom:1px solid var(--line);white-space:nowrap}td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr.u{cursor:pointer}tr.u:hover td{background:#fcfbff}td.num{text-align:right;font-variant-numeric:tabular-nums}th.num{text-align:right}
+.who b{display:block}.who span{color:var(--muted);font-size:12px}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}.pill.healthy{background:var(--ok-bg);color:var(--ok)}.pill.stalled{background:var(--bad-bg);color:var(--bad)}.pill.no_results{background:#f2f4f7;color:var(--muted)}
+.ver.old{color:var(--warn);font-weight:600}
+tr.detail td{background:#fcfbff;padding:14px 18px}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px}.filters input{border:1px solid var(--line);border-radius:9px;padding:8px 11px;font:inherit;font-size:14px;min-width:220px}
+.msg{padding:40px;text-align:center;color:var(--muted)}.msg.err{color:var(--bad)}
+.scroll{overflow-x:auto}
+@media(max-width:700px){main{padding:16px}header{padding:14px 16px}.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<header><div class="brand"><span class="mark">N</span>NexaShare <span style="font-weight:500;color:var(--muted);font-size:15px">· Platform admin</span></div><a href="/dashboard.html">← Back to member area</a></header>
+<main>
+  <div class="top">
+    <div><h1>All users progress</h1><p class="sub" id="subline">Loading…</p></div>
+    <div class="seg" id="range"><button data-d="14">14 days</button><button data-d="30" class="on">30 days</button><button data-d="90">90 days</button></div>
+  </div>
+  <div id="content"><div class="msg">Loading results for every user…</div></div>
+</main>
+<div class="tip" id="tip"></div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+const fmtDay = d => new Date(d + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const fmtWhen = v => { if (!v) return '—'; const t = Date.parse(String(v).includes('T') ? v : String(v).replace(' ', 'T') + 'Z'); if (!t) return esc(v); const h = (Date.now() - t) / 3600000; if (h < 1) return 'just now'; if (h < 48) return Math.round(h) + 'h ago'; return Math.round(h / 24) + 'd ago'; };
+const pct = v => v == null ? '—' : v + '%';
+const STATUS = { healthy: 'Healthy', stalled: 'Stalled', no_results: 'No results yet' };
+let days = 30, data = null, open = new Set(), query = '';
+
+function trend(now, prev) {
+  const d = now - prev;
+  if (!d) return '<span>same as previous 7 days</span>';
+  return `<span class="${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'} ${Math.abs(d)}</span> vs previous 7 days`;
+}
+
+function tip(e, html) { const t = $('#tip'); t.innerHTML = html; t.style.display = 'block'; const x = Math.min(e.clientX + 14, innerWidth - t.offsetWidth - 8); t.style.left = x + 'px'; t.style.top = (e.clientY + 14) + 'px'; }
+function untip() { $('#tip').style.display = 'none'; }
+
+// Stacked daily bars (confirmed / failed / skipped) + optional cumulative line.
+function barChart(series, { h = 220, cumulative = false } = {}) {
+  const W = 1000, padL = 36, padR = cumulative ? 40 : 10, padT = 10, padB = 26, n = series.length;
+  const max = Math.max(1, ...series.map(d => d.confirmed + d.failed + d.skipped));
+  const step = (W - padL - padR) / n, bw = Math.max(2, step * .7);
+  const y = v => padT + (h - padT - padB) * (1 - v / max);
+  let g = '';
+  for (let i = 0; i <= 4; i++) { const v = Math.round(max * i / 4), yy = y(v); g += `<line x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}" stroke="#eef0f3"/><text x="${padL - 6}" y="${yy + 4}" text-anchor="end">${v}</text>`; }
+  const every = Math.ceil(n / 10);
+  series.forEach((d, i) => {
+    const x = padL + i * step + (step - bw) / 2; let base = h - padB;
+    for (const [k, c] of [['confirmed', 'var(--c-conf)'], ['failed', 'var(--c-fail)'], ['skipped', 'var(--c-skip)']]) {
+      const hh = (h - padT - padB) * d[k] / max; if (hh > 0) { base -= hh; g += `<rect x="${x}" y="${base}" width="${bw}" height="${hh}" fill="${c}" rx="1.5"/>`; }
+    }
+    g += `<rect x="${padL + i * step}" y="${padT}" width="${step}" height="${h - padT - padB}" fill="transparent" data-i="${i}"/>`;
+    if (i % every === 0 || i === n - 1) g += `<text x="${padL + i * step + step / 2}" y="${h - 8}" text-anchor="middle">${fmtDay(d.day)}</text>`;
+  });
+  if (cumulative) {
+    const cmax = Math.max(1, series[n - 1].cumulative_confirmed);
+    const cy = v => padT + (h - padT - padB) * (1 - v / cmax);
+    const pts = series.map((d, i) => `${padL + i * step + step / 2},${cy(d.cumulative_confirmed)}`).join(' ');
+    g += `<polyline points="${pts}" fill="none" stroke="#101828" stroke-width="2" stroke-linejoin="round"/>`;
+    g += `<text x="${W - padR + 6}" y="${cy(cmax) + 4}">${cmax}</text>`;
+  }
+  return `<svg class="chart" viewBox="0 0 ${W} ${h}" preserveAspectRatio="none" style="height:${h}px">${g}</svg>`;
+}
+
+function spark(series) {
+  const W = 120, H = 28, n = series.length, max = Math.max(1, ...series.map(d => d.confirmed + d.failed));
+  const step = W / n; let g = '';
+  series.forEach((d, i) => {
+    const hc = (H - 2) * d.confirmed / max, hf = (H - 2) * d.failed / max, x = i * step;
+    if (hf) g += `<rect x="${x}" y="${H - hc - hf}" width="${Math.max(1, step - 1)}" height="${hf}" fill="var(--c-fail)"/>`;
+    if (hc) g += `<rect x="${x}" y="${H - hc}" width="${Math.max(1, step - 1)}" height="${hc}" fill="var(--c-conf)"/>`;
+    if (!hc && !hf) g += `<rect x="${x}" y="${H - 1}" width="${Math.max(1, step - 1)}" height="1" fill="#e4e7ec"/>`;
+  });
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+}
+
+function bindTips(root, series) {
+  root.querySelectorAll('rect[data-i]').forEach(r => {
+    r.addEventListener('mousemove', e => { const d = series[+r.dataset.i]; tip(e, `<b>${fmtDay(d.day)}</b><br>Confirmed: ${d.confirmed}<br>Failed: ${d.failed}<br>Skipped: ${d.skipped}${d.cumulative_confirmed != null ? `<br>Cumulative confirmed: ${d.cumulative_confirmed}` : ''}`); });
+    r.addEventListener('mouseleave', untip);
+  });
+}
+
+function render() {
+  const p = data.platform;
+  $('#subline').textContent = `${p.users} users · ${fmtDay(data.range.from)} → ${fmtDay(data.range.to)} (UTC) · updated ${new Date(data.generated_at).toLocaleTimeString()}`;
+  const users = data.users.filter(u => !query || `${u.name} ${u.email} ${u.team}`.toLowerCase().includes(query));
+  $('#content').innerHTML = `
+  <div class="tiles">
+    <div class="tile"><div class="k">Confirmed reposts · ${days}d</div><div class="v">${p.period.confirmed}</div><div class="d">${trend(p.last7.confirmed, p.prev7.confirmed)}</div></div>
+    <div class="tile"><div class="k">Confirmation rate · ${days}d</div><div class="v">${pct(p.period.rate)}</div><div class="d">last 7 days: ${pct(p.last7.rate)}</div></div>
+    <div class="tile"><div class="k">Failed / skipped · ${days}d</div><div class="v">${p.period.failed} <span style="font-size:18px;color:var(--muted)">/ ${p.period.skipped}</span></div><div class="d">skips are not counted as attempts</div></div>
+    <div class="tile"><div class="k">Users healthy</div><div class="v">${p.healthy}<span style="font-size:18px;color:var(--muted)"> / ${p.users}</span></div><div class="d"><span class="down">${p.stalled} stalled</span> · ${p.no_results} no results</div></div>
+    <div class="tile"><div class="k">Last confirmed repost</div><div class="v" style="font-size:22px">${fmtWhen(p.last_confirmed_at)}</div><div class="d">${p.last_confirmed_at ? esc(p.last_confirmed_at) : 'none on record'}</div></div>
+  </div>
+  <div class="card"><h2>Platform results per day</h2>
+    <div class="legend"><span><i style="background:var(--c-conf)"></i>Confirmed</span><span><i style="background:var(--c-fail)"></i>Failed</span><span><i style="background:var(--c-skip)"></i>Skipped</span><span><i style="background:#101828;height:2px;vertical-align:3px"></i>Cumulative confirmed</span></div>
+    <div id="pchart">${barChart(p.series, { cumulative: true })}</div></div>
+  <div class="card"><h2>Progress by user</h2><p class="sub" style="margin-bottom:10px">Healthy = a confirmed repost in the last ${data.stall_after_days} days. Click a row for that user's daily chart.</p>
+    <div class="filters"><input id="q" placeholder="Search name, email or team" value="${esc(query)}"></div>
+    <div class="scroll"><table><thead><tr><th>User</th><th>Status</th><th>${days}-day trend</th><th class="num">Confirmed ${days}d</th><th class="num">Last 7d</th><th class="num">Rate ${days}d</th><th class="num hide-sm">All-time</th><th class="hide-sm">Last confirmed</th><th class="hide-sm">Extension</th><th class="num hide-sm">Companies</th></tr></thead>
+    <tbody>${users.map(u => `
+      <tr class="u" data-id="${u.id}"><td class="who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}${u.team ? ' · ' + esc(u.team) : ''}</span></td>
+      <td><span class="pill ${u.status}">${STATUS[u.status]}</span></td>
+      <td>${spark(u.series)}</td>
+      <td class="num"><b>${u.period.confirmed}</b></td>
+      <td class="num">${u.last7.confirmed} <span class="${u.trend > 0 ? 'up' : u.trend < 0 ? 'down' : ''}" style="font-size:12px">${u.trend > 0 ? '▲' + u.trend : u.trend < 0 ? '▼' + (-u.trend) : ''}</span></td>
+      <td class="num">${pct(u.period.rate)}</td>
+      <td class="num hide-sm">${u.all_time.confirmed}</td>
+      <td class="hide-sm">${fmtWhen(u.last_confirmed_at)}</td>
+      <td class="hide-sm"><span class="ver ${u.extension_version && data.current_extension_version && u.extension_version !== data.current_extension_version ? 'old' : ''}">${esc(u.extension_version || '—')}</span><br><span style="font-size:12px;color:var(--muted)">seen ${fmtWhen(u.extension_last_seen_at)}</span></td>
+      <td class="num hide-sm">${u.companies}</td></tr>
+      ${open.has(u.id) ? `<tr class="detail"><td colspan="10"><div class="dchart" data-id="${u.id}">${barChart(u.series, { h: 160 })}</div><div class="sub" style="margin-top:6px">All-time: ${u.all_time.confirmed} confirmed · ${u.all_time.failed} failed · ${u.all_time.skipped} skipped · rate ${pct(u.all_time.rate)} · joined ${esc(u.joined_at || '—')}</div></td></tr>` : ''}`).join('') || '<tr><td colspan="10" class="msg">No users match.</td></tr>'}
+    </tbody></table></div></div>`;
+  bindTips($('#pchart'), p.series);
+  document.querySelectorAll('.dchart').forEach(el => bindTips(el, data.users.find(u => u.id === +el.dataset.id).series));
+  document.querySelectorAll('tr.u').forEach(tr => tr.onclick = () => { const id = +tr.dataset.id; open.has(id) ? open.delete(id) : open.add(id); render(); });
+  const q = $('#q'); q.oninput = () => { query = q.value.trim().toLowerCase(); const pos = q.selectionStart; render(); const n = $('#q'); n.focus(); n.setSelectionRange(pos, pos); };
+}
+
+async function load() {
+  $('#content').innerHTML = '<div class="msg">Loading results for every user…</div>';
+  try {
+    const r = await fetch(`/api/admin/progress?days=${days}`, { credentials: 'include' });
+    if (r.status === 401) { location.href = '/login.html'; return; }
+    if (r.status === 403) { $('#subline').textContent = ''; $('#content').innerHTML = '<div class="msg err">This page is for NexaShare platform admins only.</div>'; return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    data = await r.json(); render();
+  } catch (e) { $('#content').innerHTML = `<div class="msg err">Could not load progress: ${esc(e.message)}</div>`; }
+}
+document.querySelectorAll('#range button').forEach(b => b.onclick = () => { days = +b.dataset.d; document.querySelectorAll('#range button').forEach(x => x.classList.toggle('on', x === b)); load(); });
+load();
+</script>
+</body>
+</html>
