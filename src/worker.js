@@ -1,6 +1,7 @@
 import app from './index.js';
 import { sendAdminDailyReport } from './admin-report.js';
 import { sendSundayReports } from './weekly-report.js';
+import { ADMIN_PROGRESS_PATH, handleAdminProgress } from './admin-progress.js';
 
 const APP_ORIGIN = 'https://nexashare.com';
 const DAILY_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
@@ -229,6 +230,8 @@ async function sendDailyUserReports(env) {
 
 export default {
   fetch(request, env, ctx) {
+    // Platform-admin view of every user's results (see src/admin-progress.js).
+    if (new URL(request.url).pathname === ADMIN_PROGRESS_PATH) return handleAdminProgress(request, env, CURRENT_EXTENSION_VERSION);
     return app.fetch(request, env, ctx);
   },
   async scheduled(event, env, ctx) {
