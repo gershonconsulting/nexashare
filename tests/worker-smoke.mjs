@@ -110,7 +110,7 @@ assert.match(reminderMigration, /UNIQUE\(user_id, reminder_type\)/);
 assert.match(extensionSource, /LinkedIn visibly changed the repost control/);
 assert.match(extensionSource, /chrome\.alarms/);
 assert.match(extensionSource, /run:already-active/);
-assert.match(extensionSource, /repost:fresh-tab-retry/);
+assert.match(extensionSource, /repost:progressive-retry/);
 assert.match(extensionSource, /automatic-retry:scheduled/);
 assert.match(extensionSource, /linkedin_layout_unrecognized/);
 assert.match(extensionSource, /SOURCE_DISCOVERY_ATTEMPTS = 3/);
