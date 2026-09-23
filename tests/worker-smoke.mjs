@@ -184,8 +184,8 @@ assert.match(dashboardSource, /Repost attempts/);
 assert.match(dashboardSource, /Successful reposts/);
 assert.match(dashboardSource, /Your NexaShare account is active/);
 assert.match(dashboardSource, /Last activity:/);
-assert.match(dashboardSource, /Release 1\.2\.21/);
-assert.match(dashboardSource, /September 17, 2026/);
+assert.match(dashboardSource, /Release 1\.3\.0/);
+assert.match(dashboardSource, /September 23, 2026/);
 assert.match(dashboardSource, /id="addCompanyButton"/);
 assert.match(dashboardSource, /Add companies/);
 assert.match(dashboardSource, /Add people/);
@@ -282,6 +282,3 @@ assert.deepEqual(await cronPromise, [
 ]);
 
 console.log('Worker and extension smoke checks passed.');
-
-
-
