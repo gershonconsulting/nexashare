@@ -90,6 +90,9 @@ const repostLinksMigration = await readFile(new URL('../migrations/0003_repost_l
 const dailyReportsMigration = await readFile(new URL('../migrations/0004_daily_reports.sql', import.meta.url), 'utf8');
 const collectionsMigration = await readFile(new URL('../migrations/0010_collections.sql', import.meta.url), 'utf8');
 assert.match(workerSource, /openid profile email/);
+assert.match(workerSource, /email_verified/);
+assert.match(workerSource, /lower\(trim\(email\)\) = \?/);
+assert.match(workerSource, /Reconcile a LinkedIn identity change/);
 assert.doesNotMatch(workerSource, /w_member_social|ugcPosts|\/v2\/shares/);
 assert.match(workerSource, /UPDATE companies SET enabled/);
 assert.match(workerSource, /UPDATE companies SET name/);
