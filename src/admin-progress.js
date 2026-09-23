@@ -3,7 +3,7 @@
 // Access is limited to platform admins (PLATFORM_ADMIN_EMAILS), NOT team
 // admins: every user who registers becomes admin of their own team.
 
-export const DEFAULT_PLATFORM_ADMINS = ['oattia@gmail.com'];
+export const DEFAULT_PLATFORM_ADMINS = ['oattia@gmail.com', 'olivier@attia.com'];
 const MIN_DAYS = 7;
 const MAX_DAYS = 180;
 const STALL_AFTER_DAYS = 3;
