@@ -259,7 +259,48 @@ async function handleAuth(request, env, ctx) {
       if (!profileRes.ok) return Response.redirect(`${APP_ORIGIN}/login.html?error=profile_failed`, 302);
       const profile = await profileRes.json();
 
-      const existingUser = await env.DB.prepare('SELECT id, team_id FROM users WHERE linkedin_id = ?').bind(profile.sub).first();
+      const linkedInUser = await env.DB.prepare(
+        'SELECT id, team_id, email FROM users WHERE linkedin_id = ?'
+      ).bind(profile.sub).first();
+
+      const verifiedEmail = (profile.email_verified === true || profile.email_verified === 'true')
+        ? String(profile.email || '').trim().toLowerCase()
+        : '';
+      const emailUser = verifiedEmail
+        ? await env.DB.prepare(
+            'SELECT id, team_id, email FROM users WHERE lower(trim(email)) = ? ORDER BY id ASC LIMIT 1'
+          ).bind(verifiedEmail).first()
+        : null;
+
+      // Reconcile a LinkedIn identity change back to the existing NexaShare
+      // account when LinkedIn confirms the same email address.
+      let existingUser = linkedInUser || emailUser || null;
+      if (linkedInUser && emailUser && linkedInUser.id !== emailUser.id) {
+        const teamIds = [linkedInUser.team_id, emailUser.team_id].filter(Boolean);
+        let preferredTeamId = linkedInUser.team_id || emailUser.team_id || null;
+        let bestScore = -1;
+        for (const candidateTeamId of teamIds) {
+          const scoreRow = await env.DB.prepare(
+            `SELECT
+               (SELECT COUNT(*) FROM companies WHERE team_id = ?) +
+               (SELECT COUNT(*) FROM people WHERE team_id = ?) +
+               (SELECT COUNT(*) FROM reposts WHERE team_id = ?) AS score`
+          ).bind(candidateTeamId, candidateTeamId, candidateTeamId).first();
+          const score = Number(scoreRow?.score || 0);
+          if (score > bestScore) {
+            bestScore = score;
+            preferredTeamId = candidateTeamId;
+          }
+        }
+        if (preferredTeamId && linkedInUser.team_id !== preferredTeamId) {
+          await env.DB.prepare(
+            'UPDATE users SET team_id = ?, email = ?, name = ?, linkedin_access_token = ? WHERE id = ?'
+          ).bind(preferredTeamId, profile.email || linkedInUser.email || '', profile.name || '', tokenData.access_token, linkedInUser.id).run();
+          linkedInUser.team_id = preferredTeamId;
+        }
+        existingUser = linkedInUser;
+      }
+
       let teamId = existingUser?.team_id || null;
       if (!teamId) {
         const accountName = `${profile.name || profile.email || 'My'} account`.trim().slice(0, 100);
@@ -269,10 +310,14 @@ async function handleAuth(request, env, ctx) {
       let userId;
       if (existingUser) {
         userId = existingUser.id;
-        if (!existingUser.team_id) {
-          await env.DB.prepare('UPDATE users SET team_id = ?, linkedin_access_token = ? WHERE id = ?').bind(teamId, tokenData.access_token, userId).run();
+        if (!linkedInUser && emailUser && emailUser.id === existingUser.id) {
+          await env.DB.prepare(
+            'UPDATE users SET linkedin_id = ?, linkedin_access_token = ?, email = ?, name = ?, team_id = ? WHERE id = ?'
+          ).bind(profile.sub, tokenData.access_token, profile.email || '', profile.name || '', teamId, userId).run();
         } else {
-          await env.DB.prepare('UPDATE users SET linkedin_access_token = ? WHERE id = ?').bind(tokenData.access_token, userId).run();
+          await env.DB.prepare(
+            'UPDATE users SET linkedin_access_token = ?, email = ?, name = ?, team_id = ? WHERE id = ?'
+          ).bind(tokenData.access_token, profile.email || existingUser.email || '', profile.name || '', teamId, userId).run();
         }
       } else {
         const result = await env.DB.prepare(
