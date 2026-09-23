@@ -5,7 +5,7 @@ import { ADMIN_PROGRESS_PATH, handleAdminProgress } from './admin-progress.js';
 
 const APP_ORIGIN = 'https://nexashare.com';
 const DAILY_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
-export const CURRENT_EXTENSION_VERSION = '1.2.20';
+export const CURRENT_EXTENSION_VERSION = '1.2.21';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({
