@@ -9,7 +9,8 @@ const MAX_LOG_ENTRIES = 200;
 const DAILY_ALARM = 'dailyRepost';
 const RETRY_ALARM = 'retryRepost';
 const RETRY_DELAYS_MINUTES = [5, 20, 60];
-const CIRCUIT_BREAKER_THRESHOLD = 3;
+const SOURCE_DISCOVERY_ATTEMPTS = 3;
+const REPOST_ATTEMPTS = 4;
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 let activeSyncPromise = null;
 
@@ -142,9 +143,8 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
   const dedupeStore = await chrome.storage.local.get('processedPostIds');
   const processedPostIds = dedupeStore.processedPostIds || {};
   const enabledCompanies = companies.filter(item => item.enabled !== 0);
-  let consecutiveDiscoveryFailures = 0;
+  let discoveryFailures = 0;
   let discoveryFailureReason = '';
-  let circuitOpened = false;
   if (!enabledCompanies.length) {
     for (const company of companies) outcomes.push(makeCompanyOutcome(company, 'skipped', 'Automatic reposting is paused for this company.'));
   }
@@ -153,12 +153,14 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
       const scraped = await scrapeCompanyPosts(company);
       const posts = scraped.posts;
       if (scraped.notReady) {
-        const reason = scraped.reason || 'linkedin_layout_unrecognized';
-        consecutiveDiscoveryFailures = reason === discoveryFailureReason ? consecutiveDiscoveryFailures + 1 : 1;
-        discoveryFailureReason = reason;
-      } else {
-        consecutiveDiscoveryFailures = 0;
-        discoveryFailureReason = '';
+        discoveryFailures += 1;
+        discoveryFailureReason = scraped.reason || 'linkedin_layout_unrecognized';
+        await log('warn', 'linkedin-layout:fingerprint', {
+          company: company.name,
+          reason: discoveryFailureReason,
+          fingerprint: scraped.layoutFingerprint || 'unknown',
+          detectors: scraped.detectors || []
+        });
       }
       if (scraped.companyName && scraped.companyName !== company.name) {
         await authenticatedFetch(`/api/${company.sourceType === 'person' ? 'people' : 'companies'}/${company.id}`, {
@@ -202,18 +204,15 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
         outcomes.push(makeCompanyOutcome(company, scraped.notReady ? 'failed' : 'skipped', posts.length ? 'No new eligible posts were found.' : (scraped.notReady ? discoveryFailureDetail(scraped.reason) : 'No posts were found on the company page.')));
       }
       processedPostIds[sourceKey] = [...seen].slice(-500);
-      if (consecutiveDiscoveryFailures >= CIRCUIT_BREAKER_THRESHOLD) {
-        circuitOpened = true;
-        await log('error', 'linkedin-discovery:circuit-open', { reason: discoveryFailureReason, consecutiveFailures: consecutiveDiscoveryFailures, remainingSources: enabledCompanies.length - enabledCompanies.indexOf(company) - 1 });
-        break;
-      }
+      // A single LinkedIn layout problem must never abort the remaining sources.
+      // Preserve the failure for retry/telemetry and continue the batch.
     } catch (error) {
       await log('error', 'company:failed', { company: company.name, error: String(error) });
       outcomes.push(makeCompanyOutcome(company, 'failed', String(error)));
     }
     await sleep(SOURCE_DELAY_MS + Math.random() * 5000);
   }
-  if (circuitOpened) await scheduleAutomaticRetry(trigger, discoveryFailureReason);
+  if (discoveryFailures > 0) await scheduleAutomaticRetry(trigger, discoveryFailureReason);
   else await resetAutomaticRetry();
   await chrome.storage.local.set({ processedPostIds });
 
@@ -243,7 +242,8 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
     totalFailed: outcomes.filter(item => item.status === 'failed').length,
     totalAlreadyReposted: outcomes.filter(item => item.status === 'already_reposted').length,
     retriedOutcomes: priorPendingCount,
-    circuitOpened,
+    circuitOpened: false,
+    discoveryFailures,
     discoveryFailureReason
   };
   await chrome.storage.local.set({ lastSyncResult: result });
@@ -317,26 +317,66 @@ async function resetAutomaticRetry() {
 
 async function scrapeCompanyPosts(source) {
   let lastResult = null;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    lastResult = await scrapeCompanyPostsOnce(source);
+  for (let attempt = 1; attempt <= SOURCE_DISCOVERY_ATTEMPTS; attempt++) {
+    lastResult = await scrapeCompanyPostsOnce(source, attempt);
     if (!lastResult.notReady) return lastResult;
-    await log('warn', 'company:load-retry', { company: source.name, attempt });
-    if (attempt < 2) await sleep(1500 * attempt);
+    await log('warn', 'company:load-retry', {
+      company: source.name,
+      attempt,
+      reason: lastResult.reason,
+      fingerprint: lastResult.layoutFingerprint || 'unknown',
+      detectors: lastResult.detectors || []
+    });
+    if (attempt < SOURCE_DISCOVERY_ATTEMPTS) await sleep(1200 * attempt);
   }
-  return lastResult || { companyName: '', posts: [], notReady: true, reason: 'linkedin_layout_unrecognized' };
+  return lastResult || {
+    companyName: '',
+    posts: [],
+    notReady: true,
+    reason: 'linkedin_layout_unrecognized',
+    layoutFingerprint: 'unknown',
+    detectors: []
+  };
 }
 
-async function scrapeCompanyPostsOnce(source) {
+async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
   const url = sourceUrl(source);
   return withBackgroundTab(url, async tabId => {
     const readiness = await waitForLinkedInPosts(tabId);
-    if (!readiness.ready) return { companyName: '', posts: [], notReady: true, reason: readiness.reason };
-    for (let index = 0; index < MAX_SCROLL_ATTEMPTS; index++) {
-      await chrome.scripting.executeScript({ target: { tabId }, func: () => window.scrollBy(0, 1500) });
-      await sleep(SCROLL_DELAY_MS);
+    if (!readiness.ready) {
+      return {
+        companyName: '',
+        posts: [],
+        notReady: true,
+        reason: readiness.reason,
+        layoutFingerprint: readiness.layoutFingerprint || 'unknown',
+        detectors: readiness.detectors || []
+      };
     }
+
+    const scrolls = MAX_SCROLL_ATTEMPTS + Math.min(recoveryAttempt - 1, 2);
+    for (let index = 0; index < scrolls; index++) {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          window.focus();
+          window.scrollBy(0, Math.max(900, Math.floor(window.innerHeight * 1.25)));
+        }
+      });
+      await sleep(index < 2 ? 900 : SCROLL_DELAY_MS);
+    }
+
     const results = await chrome.scripting.executeScript({ target: { tabId }, func: extractCompanyPageFromDOM });
-    return results?.[0]?.result || { companyName: '', posts: [], notReady: true };
+    const extracted = results?.[0]?.result || { companyName: '', posts: [], detectors: [] };
+    if (!extracted.posts?.length && readiness.ready) {
+      return {
+        ...extracted,
+        notReady: true,
+        reason: 'linkedin_layout_unrecognized',
+        layoutFingerprint: readiness.layoutFingerprint || extracted.layoutFingerprint || 'unknown'
+      };
+    }
+    return extracted;
   });
 }
 
@@ -352,7 +392,18 @@ async function waitForLinkedInPosts(tabId) {
     const state = results?.[0]?.result;
     if (state?.ready) return state;
     if (state?.terminal) return state;
-    await sleep(1250);
+    if (attempt === 4 || attempt === 9) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => {
+            window.focus();
+            window.scrollBy(0, Math.max(600, window.innerHeight));
+          }
+        });
+      } catch (error) {}
+    }
+    await sleep(900 + Math.min(attempt, 5) * 120);
   }
   try {
     const results = await chrome.scripting.executeScript({ target: { tabId }, func: inspectLinkedInPage, args: [true] });
@@ -365,49 +416,141 @@ async function waitForLinkedInPosts(tabId) {
 function inspectLinkedInPage(finalAttempt = false) {
   const path = location.pathname.toLowerCase();
   const pageText = (document.body?.innerText || '').slice(0, 12000).toLowerCase();
-  if (/\/login|\/uas\/login/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_login_required' };
-  if (/\/checkpoint|\/challenge/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_checkpoint' };
-  if (/\/admin\/dashboard/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_admin_redirect' };
+  const hash = value => {
+    let h = 2166136261;
+    for (let i = 0; i < value.length; i++) {
+      h ^= value.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(36);
+  };
+  const fingerprintSource = [...document.querySelectorAll('main article, main [data-urn], main [data-view-name], main button, main [role="button"]')]
+    .slice(0, 80)
+    .map(node => [
+      node.tagName,
+      (node.className && typeof node.className === 'string' ? node.className : '').split(/\s+/).slice(0, 3).join('.'),
+      node.getAttribute('data-view-name') || '',
+      node.getAttribute('role') || '',
+      node.hasAttribute('data-urn') ? 'urn' : ''
+    ].join(':'))
+    .join('|');
+  const layoutFingerprint = 'li-' + hash(path + '|' + fingerprintSource);
+
+  if (/\/login|\/uas\/login/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_login_required', layoutFingerprint };
+  if (/\/checkpoint|\/challenge/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_checkpoint', layoutFingerprint };
+  if (/\/admin\/dashboard/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_admin_redirect', layoutFingerprint };
   if (/too many requests|temporarily restricted|try again later|réessayez plus tard|versuche es später erneut/.test(pageText)) {
-    return { ready: false, terminal: true, reason: 'linkedin_rate_limited' };
+    return { ready: false, terminal: true, reason: 'linkedin_rate_limited', layoutFingerprint };
   }
-  const legacyCards = document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], [data-view-name="feed-full-update"]');
+
+  const detectors = [];
+  const structuralCards = document.querySelectorAll([
+    '.feed-shared-update-v2',
+    '.occludable-update',
+    '[data-urn*="activity"]',
+    '[data-id*="urn:li:activity"]',
+    '[data-entity-urn*="activity"]',
+    '[data-view-name="feed-full-update"]',
+    'article[data-urn]',
+    'main article'
+  ].join(','));
+  if (structuralCards.length) detectors.push('structural-card');
+
+  const activityLinks = document.querySelectorAll('a[href*="/feed/update/urn:li:activity:"], a[href*="/posts/"]');
+  if (activityLinks.length) detectors.push('activity-link');
+
+  const semanticControls = document.querySelectorAll(
+    '[data-view-name*="repost"], [data-view-name*="reshare"], button[aria-pressed], .social-actions-button, .social-reshare-button'
+  );
+  if (semanticControls.length) detectors.push('semantic-control');
+
   const controls = [...document.querySelectorAll('button, [role="button"]')];
   const repostPattern = /repost|reshare|republier|republication|reposter|reposten|teilen|erneut teilen|volver a publicar|compartir de nuevo|ripubblica|ricondividi/i;
-  const repostControls = controls.filter(control => repostPattern.test(`${control.getAttribute('aria-label') || ''} ${control.getAttribute('data-view-name') || ''} ${control.textContent || ''}`));
-  if (legacyCards.length || repostControls.length) return { ready: true, reason: '' };
+  if (controls.some(control => repostPattern.test((control.getAttribute('aria-label') || '') + ' ' + (control.textContent || '')))) {
+    detectors.push('localized-text-fallback');
+  }
+
+  if (detectors.length) return { ready: true, reason: '', layoutFingerprint, detectors };
   const signedIn = !!document.querySelector('#global-nav, .global-nav__me, a[href*="/in/"]');
-  if (!finalAttempt) return { ready: false, reason: '' };
-  if (!signedIn) return { ready: false, reason: 'linkedin_login_required' };
-  if (/no posts|aucune publication|keine beiträge|sin publicaciones/i.test(pageText)) return { ready: false, reason: 'linkedin_empty_feed' };
-  return { ready: false, reason: 'linkedin_layout_unrecognized' };
+  if (!finalAttempt) return { ready: false, reason: '', layoutFingerprint, detectors };
+  if (!signedIn) return { ready: false, reason: 'linkedin_login_required', layoutFingerprint, detectors };
+  if (/no posts|aucune publication|keine beiträge|sin publicaciones/i.test(pageText)) {
+    return { ready: false, reason: 'linkedin_empty_feed', layoutFingerprint, detectors };
+  }
+  return { ready: false, reason: 'linkedin_layout_unrecognized', layoutFingerprint, detectors };
 }
 
 function extractCompanyPageFromDOM() {
   const byId = new Map();
-  document.querySelectorAll('.feed-shared-update-v2, [data-urn*="activity"], [data-view-name="feed-full-update"]').forEach(item => {
-    const text = item.querySelector('.feed-shared-text, .update-components-text, [data-test-id="main-feed-activity-card__commentary"]')?.textContent?.trim() || '';
-    const link = item.querySelector('a[href*="/feed/update/"], a[href*="/posts/"]');
-    const match = (item.getAttribute('data-urn') || '').match(/activity:(\d+)/) || link?.href?.match(/activity(?::|-)(\d+)/);
-    if (!match) return;
-    const id = match[1];
-    if (byId.has(id)) return;
-    const buttons = [...item.querySelectorAll('button, [role="button"]')];
-    const button = buttons.find(candidate => {
-      const value = `${candidate.getAttribute('aria-label') || ''} ${candidate.getAttribute('data-view-name') || ''} ${candidate.textContent || ''}`.toLowerCase();
-      return /repost|reshare|republier|republication|reposten/.test(value);
+  const detectors = new Set();
+  const candidateCards = new Set();
+  const cardSelectors = [
+    '.feed-shared-update-v2',
+    '.occludable-update',
+    '[data-urn*="activity"]',
+    '[data-id*="urn:li:activity"]',
+    '[data-entity-urn*="activity"]',
+    '[data-view-name="feed-full-update"]',
+    'article[data-urn]',
+    'main article'
+  ];
+
+  document.querySelectorAll(cardSelectors.join(',')).forEach(node => candidateCards.add(node));
+  if (candidateCards.size) detectors.add('structural-card');
+
+  document.querySelectorAll('a[href*="/feed/update/urn:li:activity:"], a[href*="/posts/"]').forEach(link => {
+    const card = link.closest(cardSelectors.join(',')) || link.closest('article') || link.parentElement;
+    if (card) candidateCards.add(card);
+  });
+  if (document.querySelector('a[href*="/feed/update/urn:li:activity:"], a[href*="/posts/"]')) detectors.add('activity-link');
+
+  const activityIdFrom = item => {
+    const evidence = [
+      item.getAttribute?.('data-urn') || '',
+      item.getAttribute?.('data-id') || '',
+      item.getAttribute?.('data-entity-urn') || '',
+      ...[...(item.querySelectorAll?.('a[href]') || [])].slice(0, 20).map(link => link.href || '')
+    ].join(' ');
+    return evidence.match(/(?:urn:li:activity:|activity(?::|-))(\d{6,})/i)?.[1] || '';
+  };
+
+  const controlFor = item => {
+    const semantic = item.querySelector(
+      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button[aria-pressed]'
+    );
+    if (semantic) {
+      detectors.add('semantic-control');
+      return semantic;
+    }
+    const localized = [...item.querySelectorAll('button, [role="button"]')].find(candidate => {
+      const value = ((candidate.getAttribute('aria-label') || '') + ' ' + (candidate.getAttribute('data-view-name') || '') + ' ' + (candidate.textContent || '')).toLowerCase();
+      return /repost|reshare|republier|republication|reposter|reposten|teilen|erneut teilen|volver a publicar|ripubblica|ricondividi/.test(value);
     });
+    if (localized) detectors.add('localized-text-fallback');
+    return localized || null;
+  };
+
+  for (const item of candidateCards) {
+    const id = activityIdFrom(item);
+    if (!id || byId.has(id)) continue;
+    const textNode = item.querySelector(
+      '.feed-shared-text, .update-components-text, [data-test-id="main-feed-activity-card__commentary"], [data-view-name="feed-commentary"], [dir="ltr"]'
+    );
+    const text = (textNode?.textContent || item.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+    const button = controlFor(item);
+    const controlText = (button?.getAttribute?.('aria-label') || '') + ' ' + (button?.textContent || '');
     byId.set(id, {
       id,
-      url: `https://www.linkedin.com/feed/update/urn:li:activity:${id}/`,
+      url: 'https://www.linkedin.com/feed/update/urn:li:activity:' + id + '/',
       text,
       alreadyReposted: !!button && (
         button.getAttribute('aria-pressed') === 'true' ||
         button.classList.contains('react-button--active') ||
-        /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/i.test(button.getAttribute('aria-label') || button.textContent)
+        /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/i.test(controlText)
       )
     });
-  });
+  }
+
   if (!byId.size) {
     const stripPostHeader = value => {
       const head = value.slice(0, 140);
@@ -417,72 +560,98 @@ function extractCompanyPageFromDOM() {
     const hashText = value => {
       let h = 5381;
       for (let i = 0; i < value.length; i++) h = ((h * 33) ^ value.charCodeAt(i)) >>> 0;
-      return `t${h.toString(36)}`;
+      return 't' + h.toString(36);
     };
-    const repostPattern = /repost|reshare|republier|republication|reposter|reposten|teilen|erneut teilen|volver a publicar|compartir de nuevo|ripubblica|ricondividi/i;
-    const isRepostControl = node => repostPattern.test(`${node.getAttribute('aria-label') || ''} ${node.getAttribute('data-view-name') || ''} ${node.textContent || ''}`);
-    const controls = [...document.querySelectorAll('button, [role="button"]')].filter(isRepostControl);
-    for (const control of controls) {
+    const semanticControls = [...document.querySelectorAll(
+      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button[aria-pressed], button, [role="button"]'
+    )].filter(node => {
+      if (node.matches('[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button')) return true;
+      const value = (node.getAttribute('aria-label') || '') + ' ' + (node.textContent || '');
+      return /repost|reshare|republier|republication|reposter|reposten|teilen|erneut teilen|volver a publicar|ripubblica|ricondividi/i.test(value);
+    });
+
+    for (const control of semanticControls) {
       let node = control;
       let card = null;
-      for (let depth = 0; depth < 12 && node; depth++) {
+      for (let depth = 0; depth < 14 && node; depth++) {
         node = node.parentElement;
         if (!node) break;
-        const nestedRepostControls = [...node.querySelectorAll('button, [role="button"]')].filter(isRepostControl);
         const textLength = (node.innerText || '').replace(/\s+/g, ' ').trim().length;
-        if (nestedRepostControls.length === 1 && textLength >= 40) card = node;
-        if (nestedRepostControls.length > 1) break;
+        if (textLength >= 40 && textLength <= 12000) card = node;
+        if (node.tagName === 'ARTICLE' || node.hasAttribute('data-urn')) break;
       }
       if (!card) continue;
       const cardText = (card.innerText || '').replace(/\s+/g, ' ').replace(/^Feed post\s*/i, '').trim();
-      if (!cardText) continue;
       const bodyText = stripPostHeader(cardText);
       if (!bodyText) continue;
       const matchText = bodyText.slice(0, 240);
       const id = hashText(matchText);
       if (byId.has(id)) continue;
-      const cardControl = [...card.querySelectorAll('button, [role="button"]')].find(isRepostControl);
+      detectors.add('text-hash-fallback');
       byId.set(id, {
         id,
         url: location.href.split('#')[0],
         inPlace: true,
         matchText,
         text: bodyText.slice(0, 1200),
-        alreadyReposted: !!cardControl && (
-          cardControl.getAttribute('aria-pressed') === 'true' ||
-          /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/i.test(cardControl.getAttribute('aria-label') || '')
-        )
+        alreadyReposted: control.getAttribute('aria-pressed') === 'true' ||
+          /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/i.test(control.getAttribute('aria-label') || '')
       });
     }
   }
+
   const heading = document.querySelector('h1.org-top-card-summary__title, h1.org-top-card-summary-info-list__info-item, main h1');
   const metaTitle = document.querySelector('meta[property="og:title"]')?.content || '';
   const rawName = heading?.textContent?.trim() || metaTitle.replace(/\s*[|\-]\s*LinkedIn.*$/i, '').trim();
   const companyName = rawName && !/^\d+$/.test(rawName) && !/^linkedin$/i.test(rawName) ? rawName.slice(0, 100) : '';
-  return { companyName, posts: [...byId.values()] };
+  return { companyName, posts: [...byId.values()], detectors: [...detectors] };
 }
 
 async function repostContent(post) {
   await log('info', 'repost:attempt', { postId: post.id, url: post.url, inPlace: !!post.inPlace });
   if (post.inPlace) return repostOnSourcePage(post);
+
   let result;
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= REPOST_ATTEMPTS; attempt++) {
     result = await withBackgroundTab(post.url, async tabId => {
       const readiness = await waitForLinkedInPosts(tabId);
-      if (!readiness.ready) return { confirmed: false, retryable: true, detail: discoveryFailureDetail(readiness.reason) };
+      if (!readiness.ready) {
+        return {
+          confirmed: false,
+          retryable: true,
+          detail: discoveryFailureDetail(readiness.reason) + ' Layout ' + (readiness.layoutFingerprint || 'unknown') + '.'
+        };
+      }
+
+      if (attempt > 1) {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => {
+            window.focus();
+            window.scrollTo({ top: Math.max(0, document.body.scrollHeight * 0.2), behavior: 'instant' });
+          }
+        });
+        await sleep(700 * attempt);
+      }
+
       const results = await chrome.scripting.executeScript({ target: { tabId }, func: clickAndConfirmRepost });
       return results?.[0]?.result || { confirmed: false, retryable: true, detail: 'LinkedIn did not return an outcome.' };
     });
+
     if (result.confirmed || !result.retryable) break;
-    await log('warn', 'repost:fresh-tab-retry', { postId: post.id, attempt });
-    if (attempt < 2) await sleep(1500 * attempt);
+    await log('warn', 'repost:progressive-retry', { postId: post.id, attempt, detail: result.detail });
+    if (attempt < REPOST_ATTEMPTS) await sleep(1000 * attempt);
   }
-  result ||= { confirmed: false, detail: 'LinkedIn did not return an outcome after retry.' };
-    if (result.confirmed && !result.repostUrl) {
-      result.detail += ' LinkedIn confirmed the repost, but did not expose a View repost link to record.';
-    }
-    await log(result.confirmed ? 'info' : 'warn', result.confirmed ? 'repost:confirmed' : 'repost:not-confirmed', { postId: post.id, detail: result.detail });
-    return result;
+
+  result ||= { confirmed: false, detail: 'LinkedIn did not return an outcome after progressive recovery.' };
+  if (result.confirmed && !result.repostUrl) {
+    result.detail += ' LinkedIn confirmed the repost, but did not expose a View repost link to record.';
+  }
+  await log(result.confirmed ? 'info' : 'warn', result.confirmed ? 'repost:confirmed' : 'repost:not-confirmed', {
+    postId: post.id,
+    detail: result.detail
+  });
+  return result;
 }
 
 async function repostOnSourcePage(post) {
