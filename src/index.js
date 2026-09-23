@@ -433,6 +433,89 @@ async function handleAPI(request, env, ctx) {
     return jsonResponse({ members: members.results });
   }
 
+  if (url.pathname === '/api/collections' && request.method === 'GET') {
+    const user = await getUser(request, env) || await getExtensionUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const rows = await env.DB.prepare(
+      'SELECT id, name, description, keywords, hashtags, exclude_keywords, mode, language, max_post_age_days, min_relevance, action, enabled, created_at, updated_at FROM collections WHERE team_id = ? ORDER BY created_at DESC'
+    ).bind(user.team_id).all();
+    const collections = (rows.results || []).map(row => ({
+      ...row,
+      keywords: JSON.parse(row.keywords || '[]'),
+      hashtags: JSON.parse(row.hashtags || '[]'),
+      exclude_keywords: JSON.parse(row.exclude_keywords || '[]')
+    }));
+    return jsonResponse({ collections });
+  }
+
+  if (url.pathname === '/api/collections' && request.method === 'POST') {
+    const user = await getUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const body = await request.json();
+    const cleanList = (value, hash = false) => [...new Set((Array.isArray(value) ? value : String(value || '').split(/[\n,;]+/))
+      .map(item => String(item).trim().replace(hash ? /^#+/ : /^$/, ''))
+      .filter(Boolean))].slice(0, 50);
+    const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    if (name.length < 2) return jsonResponse({ error: 'Collection name is required' }, 400);
+    const keywords = cleanList(body.keywords);
+    const hashtags = cleanList(body.hashtags, true);
+    if (!keywords.length && !hashtags.length) return jsonResponse({ error: 'Add at least one keyword or hashtag' }, 400);
+    const exclude = cleanList(body.exclude_keywords);
+    const mode = ['exact', 'broad', 'ai'].includes(body.mode) ? body.mode : 'broad';
+    const action = ['suggest', 'auto'].includes(body.action) ? body.action : 'suggest';
+    const minRelevance = Math.max(0, Math.min(100, Number(body.min_relevance) || 75));
+    const maxAge = Math.max(1, Math.min(30, Number(body.max_post_age_days) || 3));
+    const language = String(body.language || 'any').toLowerCase().slice(0, 12);
+    const result = await env.DB.prepare(
+      'INSERT INTO collections (team_id, name, description, keywords, hashtags, exclude_keywords, mode, language, max_post_age_days, min_relevance, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(user.team_id, name, String(body.description || '').trim().slice(0, 500), JSON.stringify(keywords), JSON.stringify(hashtags), JSON.stringify(exclude), mode, language, maxAge, minRelevance, action).run();
+    return jsonResponse({ success: true, id: result.meta.last_row_id }, 201);
+  }
+
+  if (url.pathname === '/api/collections/suggestions' && request.method === 'POST') {
+    const user = await getUser(request, env);
+    if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const body = await request.json();
+    const seeds = [...new Set((Array.isArray(body.keywords) ? body.keywords : String(body.keywords || '').split(/[\n,;]+/)).map(x => String(x).trim().toLowerCase()).filter(Boolean))].slice(0, 10);
+    const expansions = {
+      ai: ['artificial intelligence', 'generative ai', 'machine learning', 'automation'],
+      biotech: ['biotechnology', 'life sciences', 'clinical trials', 'drug discovery'],
+      solar: ['solar energy', 'renewable energy', 'clean energy', 'solar infrastructure'],
+      legal: ['legal tech', 'law firm', 'legal innovation', 'legal services'],
+      marketing: ['content marketing', 'brand awareness', 'social media', 'demand generation'],
+      cybersecurity: ['cyber security', 'information security', 'data protection', 'security operations']
+    };
+    const suggested = [];
+    for (const seed of seeds) {
+      suggested.push(seed);
+      for (const [key, values] of Object.entries(expansions)) if (seed.includes(key) || key.includes(seed)) suggested.push(...values);
+      if (seed.split(/\s+/).length > 1) suggested.push(seed.replace(/\s+/g, '-'));
+    }
+    const keywords = [...new Set(suggested)].slice(0, 20);
+    const hashtags = [...new Set(keywords.map(x => x.replace(/[^a-z0-9]+/gi, ' ').trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('')).filter(x => x.length >= 3))].slice(0, 15);
+    return jsonResponse({ keywords, hashtags, source: 'nexashare-topic-expansion' });
+  }
+
+  const collectionMatch = url.pathname.match(/^\/api\/collections\/(\d+)$/);
+  if (collectionMatch && request.method === 'PATCH') {
+    const user = await getUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const body = await request.json();
+    if (typeof body.enabled !== 'boolean') return jsonResponse({ error: 'Provide enabled state' }, 400);
+    const result = await env.DB.prepare('UPDATE collections SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND team_id = ?')
+      .bind(body.enabled ? 1 : 0, Number(collectionMatch[1]), user.team_id).run();
+    if (!result.meta.changes) return jsonResponse({ error: 'Collection not found' }, 404);
+    return jsonResponse({ success: true });
+  }
+
+  if (collectionMatch && request.method === 'DELETE') {
+    const user = await getUser(request, env);
+    if (!user || !user.team_id) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const result = await env.DB.prepare('DELETE FROM collections WHERE id = ? AND team_id = ?').bind(Number(collectionMatch[1]), user.team_id).run();
+    if (!result.meta.changes) return jsonResponse({ error: 'Collection not found' }, 404);
+    return jsonResponse({ success: true });
+  }
+
   if (url.pathname === '/api/companies' && request.method === 'GET') {
     const user = await getUser(request, env) || await getExtensionUser(request, env);
     if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
