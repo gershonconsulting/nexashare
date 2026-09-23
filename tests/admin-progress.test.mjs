@@ -3,7 +3,8 @@ import worker, { CURRENT_EXTENSION_VERSION } from '../src/worker.js';
 import { buildProgress, clampDays, dayRange, isPlatformAdmin, platformAdminEmails } from '../src/admin-progress.js';
 
 // ------------------------------------------------------------ access control
-assert.deepEqual(platformAdminEmails({}), ['oattia@gmail.com']);
+assert.deepEqual(platformAdminEmails({}), ['oattia@gmail.com', 'olivier@attia.com']);
+assert.equal(isPlatformAdmin({ email: 'Olivier@Attia.com' }, {}), true, 'Olivier signs in to LinkedIn with olivier@attia.com');
 assert.deepEqual(platformAdminEmails({ PLATFORM_ADMIN_EMAILS: ' A@x.com, b@y.com ' }), ['a@x.com', 'b@y.com']);
 assert.equal(isPlatformAdmin({ email: 'OAttia@gmail.com', role: 'admin' }, {}), true);
 assert.equal(isPlatformAdmin({ email: 'client@acme.com', role: 'admin' }, {}), false, 'team admin is not a platform admin');
