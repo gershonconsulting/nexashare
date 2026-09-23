@@ -134,11 +134,11 @@ assert.match(workerSource, /REGISTRATION_NOTIFICATION_TO/);
 assert.match(workerSource, /New NexaShare registration/);
 assert.match(workerSource, /if \(existingUser\)[\s\S]*else \{[\s\S]*sendRegistrationNotification/);
 assert.match(workerSource, /Only LinkedIn-confirmed reposts are counted as successful/);
-assert.equal(manifest.version, '1.2.20');
+assert.equal(manifest.version, '1.2.21');
 assert.equal(manifest.icons['128'], 'icons/icon128.png');
 assert.equal(manifest.action.default_icon['32'], 'icons/icon32.png');
 assert.ok(manifest.permissions.includes('alarms'));
-assert.match(dashboardSource, /EXPECTED_EXTENSION_VERSION\s*=\s*'1\.2\.20'/);
+assert.match(dashboardSource, /EXPECTED_EXTENSION_VERSION\s*=\s*'1\.2\.21'/);
 assert.match(dashboardSource, /data-view="summary"[\s\S]*?Summary/);
 assert.match(dashboardSource, /data-view="companies"[\s\S]*?Companies/);
 assert.match(dashboardSource, /data-view="reposts"[\s\S]*?Reposts/);
@@ -153,7 +153,7 @@ assert.match(dashboardSource, /r\.post_text/);
 assert.match(dashboardSource, /Run test now/);
 assert.match(dashboardSource, /runRepostCheck/);
 assert.match(dashboardSource, /id="extensionUpdateBanner"/);
-assert.match(dashboardSource, /EXPECTED_EXTENSION_VERSION\s*=\s*'1\.2\.20'/);
+assert.match(dashboardSource, /EXPECTED_EXTENSION_VERSION\s*=\s*'1\.2\.21'/);
 assert.match(dashboardSource, /Reload instructions/);
 assert.match(dashboardSource, /extension is not connected/);
 assert.match(dashboardSource, /extension-setup\.html/);
@@ -169,7 +169,7 @@ assert.match(dashboardSource, /Repost attempts/);
 assert.match(dashboardSource, /Successful reposts/);
 assert.match(dashboardSource, /Your NexaShare account is active/);
 assert.match(dashboardSource, /Last activity:/);
-assert.match(dashboardSource, /Release 1\.2\.20/);
+assert.match(dashboardSource, /Release 1\.2\.21/);
 assert.match(dashboardSource, /September 17, 2026/);
 assert.match(dashboardSource, /id="addCompanyButton"/);
 assert.match(dashboardSource, /Add companies/);
@@ -178,8 +178,8 @@ assert.match(dashboardSource, /function bulkLinks/);
 assert.match(dashboardSource, /companyFromLink/);
 assert.match(dashboardSource, /personFromLink/);
 assert.match(extensionSetupSource, /Load unpacked/);
-assert.match(extensionSetupSource, /Current version 1\.2\.20/);
-assert.match(extensionSetupSource, /nexashare-extension-1\.2\.20\.zip/);
+assert.match(extensionSetupSource, /Current version 1\.2\.21/);
+assert.match(extensionSetupSource, /nexashare-extension-1\.2\.21\.zip/);
 assert.match(dashboardSource, /autoConnectExtension/);
 assert.match(dashboardSource, /No connection button is required/);
 assert.doesNotMatch(popupSource, /Connect this extension from the NexaShare dashboard first/);
@@ -225,7 +225,7 @@ assert.match(reportSignalsMigration, /CREATE TABLE IF NOT EXISTS extension_runs/
 assert.doesNotMatch(reportSignalsMigration, /\btrigger TEXT/);
 
 const reportSource = await readFile(new URL('../src/worker.js', import.meta.url), 'utf8');
-assert.match(reportSource, /CURRENT_EXTENSION_VERSION = '1\.2\.20'/);
+assert.match(reportSource, /CURRENT_EXTENSION_VERSION = '1\.2\.21'/);
 assert.match(reportSource, /THE DAILY JOB DID NOT RUN/);
 assert.match(reportSource, /Outdated extension installed/);
 assert.match(reportSource, /Yesterday vs the day before/);
@@ -233,12 +233,12 @@ assert.match(reportSource, /FROM extension_runs/);
 
 // The version the report warns against must match the one the app ships and the
 // one the dashboard expects - three surfaces, one number.
-assert.match(workerSource, /CURRENT_EXTENSION_VERSION = '1\.2\.20'/);
+assert.match(workerSource, /CURRENT_EXTENSION_VERSION = '1\.2\.21'/);
 assert.match(workerSource, /current_extension_version: CURRENT_EXTENSION_VERSION/);
 assert.match(workerSource, /\/api\/extension\/seen/);
 assert.match(workerSource, /INSERT INTO extension_runs/);
 assert.match(workerSource, /INSERT OR IGNORE INTO reposts/);
-assert.equal(manifest.version, '1.2.20');
+assert.equal(manifest.version, '1.2.21');
 assert.match(dashboardSource, /\/api\/extension\/seen/);
 
 // --- platform-wide extension report -----------------------------------------
