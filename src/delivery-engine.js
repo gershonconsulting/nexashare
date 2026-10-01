@@ -18,7 +18,7 @@ const TRANSIENT_FAILURE_PATTERNS = [
 ];
 
 export function classifyFailure(detail = '') {
-  const text = String(detail || '').slice(0, 500);
+  const text = String(detail || '').slice(0, 2000);
   if (/sign.?in|not.logged.in|session/i.test(text)) return { code: 'linkedin_session_required', retryable: false };
   if (/no new eligible posts/i.test(text)) return { code: 'no_eligible_post', retryable: false };
   if (/paused/i.test(text)) return { code: 'source_paused', retryable: false };
@@ -70,9 +70,9 @@ export async function recordDeliveryOutcome(db, { teamId, userId, outcome }) {
         CASE WHEN ? THEN datetime('now', '+' || ? || ' minutes') ELSE NULL END,
         CASE WHEN ? THEN NULL ELSE datetime('now') END, ?, datetime('now'))`
     ).bind(
-      teamId, userId, outcome.postUrl, String(outcome.postTextSnippet || '').slice(0, 500),
+      teamId, userId, outcome.postUrl, String(outcome.postTextSnippet || '').slice(0, 2000),
       String(outcome.companyName || '').slice(0, 100), status, failure?.code || null,
-      String(outcome.detail || '').slice(0, 500), shouldRetry ? 1 : 0, retryMinutes,
+      String(outcome.detail || '').slice(0, 2000), shouldRetry ? 1 : 0, retryMinutes,
       shouldRetry ? 1 : 0, outcome.repostUrl || null
     ).run();
     return { status, retryScheduled: shouldRetry, failureCode: failure?.code || null };
@@ -84,7 +84,7 @@ export async function recordDeliveryOutcome(db, { teamId, userId, outcome }) {
        completed_at = CASE WHEN ? THEN NULL ELSE datetime('now') END, updated_at = datetime('now')
      WHERE id = ?`
   ).bind(
-    status, failure?.code || null, String(outcome.detail || '').slice(0, 500), outcome.repostUrl || null,
+    status, failure?.code || null, String(outcome.detail || '').slice(0, 2000), outcome.repostUrl || null,
     shouldRetry ? 1 : 0, retryMinutes, shouldRetry ? 1 : 0, current.id
   ).run();
   return { status, retryScheduled: shouldRetry, failureCode: failure?.code || null };
