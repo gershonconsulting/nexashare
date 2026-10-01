@@ -1,0 +1,1 @@
+ALTER TABLE reposts ADD COLUMN hashtags TEXT NOT NULL DEFAULT '[]';
