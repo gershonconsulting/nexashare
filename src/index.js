@@ -7,7 +7,7 @@ const LINKEDIN_REDIRECT_URI = `${APP_ORIGIN}/api/auth/callback`;
 const LINKEDIN_SCOPES = 'openid profile email';
 const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00';
 const SETUP_REMINDER_TYPE = 'missing_company_after_connection';
-const CURRENT_EXTENSION_VERSION = '1.2.21';
+const CURRENT_EXTENSION_VERSION = '1.2.22';
 const SETUP_REMINDER_FROM = 'NexaShare <hello@nexashare.com>';
 const DAILY_REPORT_TYPE = 'daily_repost_report';
 const REGISTRATION_NOTIFICATION_FROM = SETUP_REMINDER_FROM;
@@ -56,6 +56,11 @@ function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, character => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
   })[character]);
+}
+
+function extractHashtags(value) {
+  const matches = String(value || '').match(/#[\p{L}\p{N}_][\p{L}\p{N}_.-]*/gu) || [];
+  return [...new Set(matches.map(tag => tag.slice(1).replace(/[.,!?;:)\]}]+$/g, '').toLowerCase()).filter(Boolean))].slice(0, 50);
 }
 
 async function sendEmailWithResend(env, message) {
@@ -688,12 +693,13 @@ async function handleAPI(request, env, ctx) {
       const outcomeId = typeof outcome.outcomeId === 'string' ? outcome.outcomeId.slice(0, 100) : null;
       const inserted = await env.DB.prepare(
         `INSERT OR IGNORE INTO reposts
-         (user_id, team_id, original_post_url, repost_url, post_text, status, company_name, detail, attempted_at, confirmed_at, outcome_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (user_id, team_id, original_post_url, repost_url, post_text, hashtags, status, company_name, detail, attempted_at, confirmed_at, outcome_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         user.id, user.team_id, postUrl,
         typeof outcome.repostUrl === 'string' && outcome.repostUrl.startsWith('https://www.linkedin.com/') ? outcome.repostUrl.slice(0, 1000) : null,
-        String(outcome.postTextSnippet || '').slice(0, 500),
+        String(outcome.postTextSnippet || '').slice(0, 2000),
+        JSON.stringify(extractHashtags(outcome.postTextSnippet)),
         status, String(outcome.companyName || '').slice(0, 100), String(outcome.detail || '').slice(0, 500),
         outcome.attemptedAt || new Date().toISOString(), status === 'confirmed' ? (outcome.confirmedAt || new Date().toISOString()) : null,
         outcomeId
@@ -767,6 +773,57 @@ async function handleAPI(request, env, ctx) {
     ).bind(id, user.team_id).run();
     if (!result.meta.changes) return jsonResponse({ error: 'Delivery is not eligible for retry' }, 409);
     return jsonResponse({ success: true });
+  }
+
+  if (url.pathname === '/api/hashtags' && request.method === 'GET') {
+    const user = await getUser(request, env);
+    if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const rows = await env.DB.prepare(
+      `SELECT post_text, hashtags, company_name, attempted_at, created_at
+       FROM reposts
+       WHERE user_id = ? AND status = 'confirmed'
+       ORDER BY datetime(COALESCE(attempted_at, created_at)) DESC
+       LIMIT 1000`
+    ).bind(user.id).all();
+
+    const ranked = new Map();
+    let postsWithHashtags = 0;
+    for (const row of rows.results || []) {
+      let tags = [];
+      try { tags = JSON.parse(row.hashtags || '[]'); } catch (_) { tags = []; }
+      if (!Array.isArray(tags) || !tags.length) tags = extractHashtags(row.post_text);
+      tags = [...new Set(tags.map(tag => String(tag || '').replace(/^#+/, '').trim().toLowerCase()).filter(Boolean))];
+      if (!tags.length) continue;
+      postsWithHashtags++;
+      const seenAt = row.attempted_at || row.created_at || null;
+      for (const tag of tags) {
+        const item = ranked.get(tag) || { hashtag: tag, uses: 0, companies: new Set(), last_seen_at: null };
+        item.uses++;
+        if (row.company_name) item.companies.add(row.company_name);
+        if (seenAt && (!item.last_seen_at || new Date(seenAt) > new Date(item.last_seen_at))) item.last_seen_at = seenAt;
+        ranked.set(tag, item);
+      }
+    }
+
+    const confirmedPosts = (rows.results || []).length;
+    const hashtags = [...ranked.values()]
+      .map(item => ({
+        hashtag: item.hashtag,
+        uses: item.uses,
+        share_of_confirmed_posts: confirmedPosts ? Math.round((item.uses / confirmedPosts) * 1000) / 10 : 0,
+        companies: [...item.companies].sort(),
+        last_seen_at: item.last_seen_at
+      }))
+      .sort((a, b) => b.uses - a.uses || String(b.last_seen_at || '').localeCompare(String(a.last_seen_at || '')) || a.hashtag.localeCompare(b.hashtag))
+      .slice(0, 50);
+
+    return jsonResponse({
+      confirmed_posts: confirmedPosts,
+      posts_with_hashtags: postsWithHashtags,
+      unique_hashtags: ranked.size,
+      coverage_pct: confirmedPosts ? Math.round((postsWithHashtags / confirmedPosts) * 1000) / 10 : 0,
+      hashtags
+    });
   }
 
   if (url.pathname === '/api/reposts' && request.method === 'GET') {
