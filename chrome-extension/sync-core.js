@@ -865,7 +865,7 @@ function makeOutcome(company, post, status, detail, repostUrl = '') {
     companyName: company.name,
     postUrl: post.url,
     repostUrl: repostUrl || '',
-    postTextSnippet: (post.text || '').slice(0, 500),
+    postTextSnippet: (post.text || '').slice(0, 2000),
     status,
     detail,
     attemptedAt: timestamp,
