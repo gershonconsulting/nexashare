@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: nexashare-production
@@ -67,6 +67,20 @@ jobs:
           rm -f public/nexashare-extension-*.zip public/nexashare-extension.zip
           (cd chrome-extension && zip -r "../public/nexashare-extension-$VERSION.zip" .)
           cp "public/nexashare-extension-$VERSION.zip" public/nexashare-extension.zip
+
+      - name: Publish extension download on GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./chrome-extension/manifest.json').version")
+          TAG="extension-v$VERSION"
+          ASSET="public/nexashare-extension-$VERSION.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+          else
+            gh release create "$TAG" --title "NexaShare Chrome Extension v$VERSION" --notes "Private testing build of the NexaShare Chrome extension."
+          fi
+          gh release upload "$TAG" "$ASSET" --clobber
 
       - name: Apply D1 migrations and deploy Worker with assets
         uses: cloudflare/wrangler-action@v3
