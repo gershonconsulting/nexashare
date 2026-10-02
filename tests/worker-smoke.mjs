@@ -146,6 +146,8 @@ assert.match(collectionsMigration, /CREATE TABLE IF NOT EXISTS collections/);
 assert.match(collectionsMigration, /CREATE TABLE IF NOT EXISTS collection_candidates/);
 assert.match(dashboardSource, /Hashtag intelligence/);
 assert.match(dashboardSource, /Most used hashtags/);
+assert.match(dashboardSource, /View by source/);
+assert.match(workerSource, /share_of_source_posts/);
 assert.match(dashboardSource, /\/api\/hashtags/);
 assert.match(workerSource, /extractHashtags/);
 assert.match(workerSource, /share_of_confirmed_posts/);
