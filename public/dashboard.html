@@ -64,6 +64,7 @@ body{background:var(--canvas);color:var(--navy)}.app{grid-template-columns:252px
     </div>
     <div class="panel">
       <div class="toolbar"><div><h2>Most used hashtags</h2><p class="muted">Ranked by the number of LinkedIn-confirmed reposts containing each hashtag.</p></div><span class="muted" id="hashtagCoverage"></span></div>
+      <div class="toolbar"><div></div><div><select id="hashtagView"><option value="overall">Overall</option><option value="source">View by source</option></select></div></div>
       <div id="hashtagRanking"></div>
       <p class="muted">Historical ranking is calculated from the post text NexaShare already captured. Older records may be incomplete when a hashtag appeared beyond the previously stored text snippet; v1.2.22 captures more post text going forward.</p>
     </div>
@@ -148,14 +149,22 @@ async function loadCompanies(){model.companies=(await api('/api/companies')).com
 async function loadPeople(){model.people=(await api('/api/people')).people;renderPeople()}
 async function loadHashtags(){model.hashtagData=await api('/api/hashtags');renderHashtags()}
 function renderHashtags(){
-  const data=model.hashtagData||{confirmed_posts:0,posts_with_hashtags:0,unique_hashtags:0,coverage_pct:0,hashtags:[]};
+  const data=model.hashtagData||{confirmed_posts:0,posts_with_hashtags:0,unique_hashtags:0,coverage_pct:0,hashtags:[],sources:[]};
   const stats=[['Confirmed reposts',data.confirmed_posts||0],['Posts with #',data.posts_with_hashtags||0],['Unique #',data.unique_hashtags||0],['Coverage',(data.coverage_pct||0)+'%']];
   document.getElementById('hashtagStats').innerHTML=stats.map(x=>`<div class="stat"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');
   document.getElementById('hashtagCoverage').textContent=data.confirmed_posts?`${data.posts_with_hashtags||0} of ${data.confirmed_posts} confirmed reposts contained hashtags`:'No confirmed reposts captured yet';
+  const view=document.getElementById('hashtagView')?.value||'overall';
+  const target=document.getElementById('hashtagRanking');
+  if(view==='source'){
+    const sources=data.sources||[];
+    target.innerHTML=sources.length?sources.map(source=>`<section class="company-group"><h3>${escapeHtml(source.source)} · ${Number(source.confirmed_posts||0)} confirmed repost${Number(source.confirmed_posts||0)===1?'':'s'}</h3><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Hashtag</th><th>Uses</th><th>Share of this source</th><th>Last seen</th></tr></thead><tbody>${(source.hashtags||[]).length?(source.hashtags||[]).map((h,i)=>`<tr><td><strong>#${i+1}</strong></td><td><strong>#${escapeHtml(h.hashtag)}</strong></td><td>${Number(h.uses||0)}</td><td>${Number(h.share_of_source_posts||0)}%</td><td>${escapeHtml(fmt(h.last_seen_at))}</td></tr>`).join(''):`<tr><td colspan="5" class="muted">No hashtags captured for this source yet.</td></tr>`}</tbody></table></div><p class="muted">${Number(source.posts_with_hashtags||0)} of ${Number(source.confirmed_posts||0)} confirmed reposts from this source contained hashtags · ${Number(source.unique_hashtags||0)} unique hashtags</p></section>`).join(''):'<div class="empty">No source-level hashtag data yet.</div>';
+    return;
+  }
   const rows=data.hashtags||[];
-  document.getElementById('hashtagRanking').innerHTML=rows.length?`<div class="table-wrap"><table><thead><tr><th>Rank</th><th>Hashtag</th><th>Uses</th><th>Share of confirmed posts</th><th>Sources</th><th>Last seen</th></tr></thead><tbody>${rows.map((h,i)=>`<tr><td><strong>#${i+1}</strong></td><td><strong>#${escapeHtml(h.hashtag)}</strong></td><td>${Number(h.uses||0)}</td><td>${Number(h.share_of_confirmed_posts||0)}%</td><td>${escapeHtml((h.companies||[]).join(', ')||'—')}</td><td>${escapeHtml(fmt(h.last_seen_at))}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No hashtags have been captured in confirmed reposts yet. NexaShare will populate this automatically as it reposts content.</div>';
+  target.innerHTML=rows.length?`<div class="table-wrap"><table><thead><tr><th>Rank</th><th>Hashtag</th><th>Uses</th><th>Share of confirmed posts</th><th>Sources</th><th>Last seen</th></tr></thead><tbody>${rows.map((h,i)=>`<tr><td><strong>#${i+1}</strong></td><td><strong>#${escapeHtml(h.hashtag)}</strong></td><td>${Number(h.uses||0)}</td><td>${Number(h.share_of_confirmed_posts||0)}%</td><td>${escapeHtml((h.companies||[]).join(', ')||'—')}</td><td>${escapeHtml(fmt(h.last_seen_at))}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No hashtags have been captured in confirmed reposts yet. NexaShare will populate this automatically as it reposts content.</div>';
 }
 document.getElementById('refreshHashtags').addEventListener('click',async e=>{e.currentTarget.disabled=true;try{await loadHashtags()}finally{e.currentTarget.disabled=false}});
+document.getElementById('hashtagView').addEventListener('change',renderHashtags);
 function renderPeople(){const el=document.getElementById('personList');el.innerHTML=model.people.length?model.people.map(p=>`<div class="company-row"><span><strong>${escapeHtml(p.name)}</strong><br><a class="muted" href="https://www.linkedin.com/in/${escapeHtml(p.vanity)}/" target="_blank" rel="noopener">linkedin.com/in/${escapeHtml(p.vanity)}</a></span><button class="button secondary remove-person" data-id="${Number(p.id)}" data-name="${escapeHtml(p.name)}">Remove</button></div>`).join(''):'<div class="empty">No people configured yet.</div>'}
 document.getElementById('personForm').addEventListener('submit',async e=>{e.preventDefault();try{await addBulk('person')}catch(x){showMessage('personMessage',x.message,'error');document.getElementById('personUrl').focus()}});
 document.getElementById('personList').addEventListener('click',async e=>{const b=e.target.closest('.remove-person');if(!b||!confirm(`Remove ${b.dataset.name} from NexaShare?`))return;await api(`/api/people/${b.dataset.id}`,{method:'DELETE'});await loadPeople()});
