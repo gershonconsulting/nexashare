@@ -787,22 +787,36 @@ async function handleAPI(request, env, ctx) {
     ).bind(user.id).all();
 
     const ranked = new Map();
+    const bySource = new Map();
     let postsWithHashtags = 0;
     for (const row of rows.results || []) {
       let tags = [];
       try { tags = JSON.parse(row.hashtags || '[]'); } catch (_) { tags = []; }
       if (!Array.isArray(tags) || !tags.length) tags = extractHashtags(row.post_text);
       tags = [...new Set(tags.map(tag => String(tag || '').replace(/^#+/, '').trim().toLowerCase()).filter(Boolean))];
-      if (!tags.length) continue;
-      postsWithHashtags++;
+      const sourceName = String(row.company_name || 'Unknown source').trim() || 'Unknown source';
+      const source = bySource.get(sourceName) || { source: sourceName, confirmed_posts: 0, posts_with_hashtags: 0, tags: new Map(), last_seen_at: null };
+      source.confirmed_posts++;
       const seenAt = row.attempted_at || row.created_at || null;
+      if (seenAt && (!source.last_seen_at || new Date(seenAt) > new Date(source.last_seen_at))) source.last_seen_at = seenAt;
+      if (!tags.length) {
+        bySource.set(sourceName, source);
+        continue;
+      }
+      postsWithHashtags++;
+      source.posts_with_hashtags++;
       for (const tag of tags) {
+        const sourceTag = source.tags.get(tag) || { hashtag: tag, uses: 0, last_seen_at: null };
+        sourceTag.uses++;
+        if (seenAt && (!sourceTag.last_seen_at || new Date(seenAt) > new Date(sourceTag.last_seen_at))) sourceTag.last_seen_at = seenAt;
+        source.tags.set(tag, sourceTag);
         const item = ranked.get(tag) || { hashtag: tag, uses: 0, companies: new Set(), last_seen_at: null };
         item.uses++;
         if (row.company_name) item.companies.add(row.company_name);
         if (seenAt && (!item.last_seen_at || new Date(seenAt) > new Date(item.last_seen_at))) item.last_seen_at = seenAt;
         ranked.set(tag, item);
       }
+      bySource.set(sourceName, source);
     }
 
     const confirmedPosts = (rows.results || []).length;
@@ -817,12 +831,33 @@ async function handleAPI(request, env, ctx) {
       .sort((a, b) => b.uses - a.uses || String(b.last_seen_at || '').localeCompare(String(a.last_seen_at || '')) || a.hashtag.localeCompare(b.hashtag))
       .slice(0, 50);
 
+    const sources = [...bySource.values()]
+      .map(source => ({
+        source: source.source,
+        confirmed_posts: source.confirmed_posts,
+        posts_with_hashtags: source.posts_with_hashtags,
+        unique_hashtags: source.tags.size,
+        coverage_pct: source.confirmed_posts ? Math.round((source.posts_with_hashtags / source.confirmed_posts) * 1000) / 10 : 0,
+        last_seen_at: source.last_seen_at,
+        hashtags: [...source.tags.values()]
+          .map(tag => ({
+            hashtag: tag.hashtag,
+            uses: tag.uses,
+            share_of_source_posts: source.confirmed_posts ? Math.round((tag.uses / source.confirmed_posts) * 1000) / 10 : 0,
+            last_seen_at: tag.last_seen_at
+          }))
+          .sort((a, b) => b.uses - a.uses || String(b.last_seen_at || '').localeCompare(String(a.last_seen_at || '')) || a.hashtag.localeCompare(b.hashtag))
+          .slice(0, 20)
+      }))
+      .sort((a, b) => b.confirmed_posts - a.confirmed_posts || b.posts_with_hashtags - a.posts_with_hashtags || a.source.localeCompare(b.source));
+
     return jsonResponse({
       confirmed_posts: confirmedPosts,
       posts_with_hashtags: postsWithHashtags,
       unique_hashtags: ranked.size,
       coverage_pct: confirmedPosts ? Math.round((postsWithHashtags / confirmedPosts) * 1000) / 10 : 0,
-      hashtags
+      hashtags,
+      sources
     });
   }
 
