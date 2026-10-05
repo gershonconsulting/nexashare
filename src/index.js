@@ -7,7 +7,7 @@ const LINKEDIN_REDIRECT_URI = `${APP_ORIGIN}/api/auth/callback`;
 const LINKEDIN_SCOPES = 'openid profile email';
 const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00';
 const SETUP_REMINDER_TYPE = 'missing_company_after_connection';
-const CURRENT_EXTENSION_VERSION = '1.2.22';
+const CURRENT_EXTENSION_VERSION = '1.2.23';
 const SETUP_REMINDER_FROM = 'NexaShare <hello@nexashare.com>';
 const DAILY_REPORT_TYPE = 'daily_repost_report';
 const REGISTRATION_NOTIFICATION_FROM = SETUP_REMINDER_FROM;
@@ -742,6 +742,50 @@ async function handleAPI(request, env, ctx) {
        WHERE user_id = ? AND revoked_at IS NULL`
     ).bind(version, user.id).run();
     return jsonResponse({ success: true, current: CURRENT_EXTENSION_VERSION, installed: version });
+  }
+
+  if (url.pathname === '/api/extension/commands/next' && request.method === 'GET') {
+    const user = await getExtensionUser(request, env);
+    if (!user) return jsonResponse({ error: 'Invalid extension token' }, 401);
+    const command = await env.DB.prepare(
+      "SELECT id, command, payload, created_at FROM extension_commands WHERE user_id = ? AND status = 'pending' ORDER BY id LIMIT 1"
+    ).bind(user.id).first();
+    if (!command) return jsonResponse({ command: null });
+    const claimed = await env.DB.prepare(
+      "UPDATE extension_commands SET status = 'claimed', claimed_at = datetime('now') WHERE id = ? AND status = 'pending'"
+    ).bind(command.id).run();
+    if (!claimed.meta?.changes) return jsonResponse({ command: null });
+    let payload = null;
+    try { payload = command.payload ? JSON.parse(command.payload) : null; } catch (_) {}
+    return jsonResponse({ command: { ...command, payload } });
+  }
+
+  const completeCommand = url.pathname.match(/^\/api\/extension\/commands\/(\d+)\/complete$/);
+  if (completeCommand && request.method === 'POST') {
+    const user = await getExtensionUser(request, env);
+    if (!user) return jsonResponse({ error: 'Invalid extension token' }, 401);
+    const body = await request.json().catch(() => ({}));
+    const status = body.status === 'failed' ? 'failed' : 'completed';
+    const result = JSON.stringify(body.result ?? null).slice(0, 20000);
+    const updated = await env.DB.prepare(
+      "UPDATE extension_commands SET status = ?, completed_at = datetime('now'), result = ? WHERE id = ? AND user_id = ? AND status = 'claimed'"
+    ).bind(status, result, Number(completeCommand[1]), user.id).run();
+    return jsonResponse({ success: Boolean(updated.meta?.changes) }, updated.meta?.changes ? 200 : 409);
+  }
+
+  if (url.pathname === '/api/extension/diagnostics' && request.method === 'POST') {
+    const user = await getExtensionUser(request, env);
+    if (!user) return jsonResponse({ error: 'Invalid extension token' }, 401);
+    const body = await request.json().catch(() => ({}));
+    const traceId = String(body.traceId || '').slice(0, 100);
+    const stage = String(body.stage || '').slice(0, 80);
+    if (!traceId || !stage) return jsonResponse({ error: 'traceId and stage are required' }, 400);
+    const state = body.state && typeof body.state === 'object' ? body.state : null;
+    await env.DB.prepare(
+      "INSERT INTO extension_diagnostics (trace_id, user_id, team_id, stage, url, metadata, state) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).bind(traceId, user.id, user.team_id, stage, String(state?.url || '').slice(0, 1000),
+      JSON.stringify(body.metadata || {}).slice(0, 20000), JSON.stringify(state || {}).slice(0, 50000)).run();
+    return jsonResponse({ success: true });
   }
 
   if (url.pathname === '/api/extension/deliveries/processing' && request.method === 'POST') {
