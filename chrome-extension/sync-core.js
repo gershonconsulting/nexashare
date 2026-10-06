@@ -8,6 +8,7 @@ const POST_DISCOVERY_ATTEMPTS = 16;
 const MAX_LOG_ENTRIES = 200;
 const DAILY_ALARM = 'dailyRepost';
 const RETRY_ALARM = 'retryRepost';
+const COMMAND_ALARM = 'serverCommands';
 const RETRY_DELAYS_MINUTES = [5, 20, 60];
 const SOURCE_DISCOVERY_ATTEMPTS = 3;
 const REPOST_ATTEMPTS = 4;
@@ -27,8 +28,12 @@ chrome.runtime.onInstalled.addListener(() => {
   log('info', 'Extension installed; automatic daily check enabled');
 });
 
-chrome.runtime.onStartup.addListener(ensureDailyAlarm);
+chrome.runtime.onStartup.addListener(() => { ensureDailyAlarm(); ensureCommandAlarm(); });
 chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === COMMAND_ALARM) {
+    pollServerCommands().catch(error => log('error', 'command:poll-failed', { error: String(error) }));
+    return;
+  }
   if (alarm.name === DAILY_ALARM || alarm.name === RETRY_ALARM) {
     const trigger = alarm.name === RETRY_ALARM ? 'automatic-retry' : 'scheduled';
     runFullSync({ trigger }).catch(error => log('error', 'scheduled-run:failed', { error: String(error), trigger }));
@@ -634,8 +639,12 @@ async function repostContent(post) {
         await sleep(700 * attempt);
       }
 
+      const traceId = crypto.randomUUID();
+      await captureDiagnostic(tabId, traceId, 'post_ready', { postId: post.id, attempt, url: post.url, readiness });
       const results = await chrome.scripting.executeScript({ target: { tabId }, func: clickAndConfirmRepost });
-      return results?.[0]?.result || { confirmed: false, retryable: true, detail: 'LinkedIn did not return an outcome.' };
+      const outcome = results?.[0]?.result || { confirmed: false, retryable: true, detail: 'LinkedIn did not return an outcome.' };
+      await captureDiagnostic(tabId, traceId, outcome.confirmed ? 'repost_confirmed' : 'repost_failed', { postId: post.id, attempt, outcome });
+      return outcome;
     });
 
     if (result.confirmed || !result.retryable) break;
@@ -832,6 +841,30 @@ async function clickAndConfirmRepostInPlace(matchText) {
     if (controlChanged) return { confirmed: true, detail: 'LinkedIn visibly changed the repost control to its active state.' };
   }
   return { confirmed: false, detail: 'NexaShare selected LinkedIn\'s direct repost choice, but LinkedIn did not provide visible confirmation.' };
+}
+
+async function captureDiagnostic(tabId, traceId, stage, metadata = {}) {
+  try {
+    const stateResult = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => ({
+        url: location.href,
+        title: document.title,
+        visibleText: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 4000),
+        controls: [...document.querySelectorAll('button, [role="button"], [role="menuitem"], [role="status"], [role="alert"]')]
+          .filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
+          .slice(0, 80)
+          .map(el => ({ role: el.getAttribute('role'), aria: el.getAttribute('aria-label'), text: (el.innerText || '').replace(/\s+/g, ' ').slice(0, 200) }))
+      })
+    });
+    const payload = { traceId, stage, ts: new Date().toISOString(), metadata, state: stateResult?.[0]?.result || null };
+    await log('info', 'diagnostic:stage', payload);
+    await authenticatedFetch('/api/extension/diagnostics', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    await log('warn', 'diagnostic:capture-failed', { traceId, stage, error: String(error) });
+  }
 }
 
 async function withBackgroundTab(url, operation) {
