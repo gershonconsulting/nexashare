@@ -94,7 +94,7 @@ body{background:var(--canvas);color:var(--navy)}.app{grid-template-columns:252px
   <section class="view" id="view-referral"><div class="panel"><h2>Referral</h2><div class="empty"><strong>Referral tracking is not configured yet.</strong><p>No referral code, reward, or attribution will be claimed until the product rules and storage are approved.</p></div></div></section>
 </main></div>
 <script>
-const EXPECTED_EXTENSION_VERSION='1.2.22';
+const EXPECTED_EXTENSION_VERSION='1.2.23';
 const EXTENSION_PACKAGE=`nexashare-extension-${EXPECTED_EXTENSION_VERSION}.zip`;const EXTENSION_RELEASE_URL=`https://github.com/gershonconsulting/nexashare/releases/download/extension-v${EXPECTED_EXTENSION_VERSION}/${EXTENSION_PACKAGE}`;document.querySelectorAll('a[download^="nexashare-extension-"]').forEach(link=>{link.href=EXTENSION_RELEASE_URL;link.download=EXTENSION_PACKAGE;link.textContent=`Download v${EXPECTED_EXTENSION_VERSION}`});
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let model={user:null,reposts:[],team:[],companies:[],people:[],hashtagData:null,subscription:null,deliveryHealth:null};let ext={installed:false,version:null,connected:false,linkedIn:false,lastSync:null,log:[]};
