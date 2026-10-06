@@ -106,7 +106,7 @@ function renderLog() {
 document.getElementById('sync-now').addEventListener('click', function (e) {
   var btn = e.currentTarget;
   btn.disabled = true;
-  show('Sync running. LinkedIn tabs will open while NexaShare checks and acts\u2026', 'info');
+  show('Sync running quietly in the background while NexaShare checks and acts\u2026', 'info');
 
   chrome.runtime.sendMessage({ action: 'syncNow' }, function (response) {
     btn.disabled = false;

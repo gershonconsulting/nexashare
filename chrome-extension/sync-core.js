@@ -868,13 +868,42 @@ async function captureDiagnostic(tabId, traceId, stage, metadata = {}) {
 }
 
 async function withBackgroundTab(url, operation) {
-  const tab = await chrome.tabs.create({ url, active: false });
+  // LinkedIn defers parts of its SPA when a page is opened as an inactive tab.
+  // Keep the collection page active in its own unfocused window instead: the page
+  // renders normally, but the user's current window and tab are left untouched.
+  let previousWindowId = null;
+  let collectionWindow = null;
   try {
-    await waitForTabReady(tab.id);
-    return await operation(tab.id);
+    const previousWindow = await chrome.windows.getLastFocused();
+    previousWindowId = previousWindow?.id ?? null;
+  } catch (error) {}
+
+  try {
+    collectionWindow = await chrome.windows.create({
+      url,
+      focused: false,
+      type: 'normal',
+      width: 1280,
+      height: 900,
+      top: 0,
+      left: 0
+    });
+    const tabId = collectionWindow.tabs?.[0]?.id;
+    if (tabId == null) throw new Error('NexaShare could not create its background LinkedIn page.');
+    await restoreUserWindowFocus(previousWindowId);
+    await waitForTabReady(tabId);
+    return await operation(tabId);
   } finally {
-    try { await chrome.tabs.remove(tab.id); } catch (error) {}
+    if (collectionWindow?.id != null) {
+      try { await chrome.windows.remove(collectionWindow.id); } catch (error) {}
+    }
+    await restoreUserWindowFocus(previousWindowId);
   }
+}
+
+async function restoreUserWindowFocus(windowId) {
+  if (windowId == null) return;
+  try { await chrome.windows.update(windowId, { focused: true }); } catch (error) {}
 }
 
 async function waitForTabReady(tabId) {
