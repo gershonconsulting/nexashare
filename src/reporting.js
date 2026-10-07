@@ -1,3 +1,4 @@
+import { proofOfConceptProgress } from './access-policy.js';
 export const RATE_DEFINITION = 'Confirmed ÷ (confirmed + failed). Skipped and already reposted are excluded. No attempts = N/A.';
 
 export function rate(confirmed, failed) {
@@ -54,7 +55,13 @@ export async function collectDailySeries(db, userId, days = 30, date = new Date(
     for (const key of ['confirmed', 'failed', 'skipped', 'already_reposted', 'processed']) sum[key] += row[key];
     return sum;
   }, { confirmed: 0, failed: 0, skipped: 0, already_reposted: 0, processed: 0 });
-  return { timezone: 'UTC', from, to, days, definition: RATE_DEFINITION, daily, totals: normalizeCounts(totals) };
+  const completed = daily.filter(row => !row.partial).reduce((sum, row) => {
+    sum.confirmed += row.confirmed; sum.failed += row.failed; return sum;
+  }, { confirmed: 0, failed: 0 });
+  return { timezone: 'UTC', from, to, days, definition: RATE_DEFINITION, daily, totals: normalizeCounts(totals),
+    proof_of_concept: { ...proofOfConceptProgress(completed.confirmed, completed.failed),
+      confirmed: completed.confirmed, failed: completed.failed,
+      from, to: daily.filter(row => !row.partial).at(-1)?.day || null, excludes_today: includeToday } };
 }
 
 export async function collectDaySummary(db, userId, offset) {

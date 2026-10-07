@@ -1,3 +1,4 @@
+import { ACCESS_MODE, SUCCESS_TARGET_PERCENT } from './access-policy.js';
 import { collectDailySeries } from './reporting.js';
 import { getIntelligence } from './intelligence.js';
 import { referralCode, attributeReferral, getReferralDashboard, handleReferralPayment } from './referrals.js';
@@ -477,37 +478,31 @@ async function handleAPI(request, env, ctx) {
   if (url.pathname === '/api/subscription' && request.method === 'GET') {
     const user = await getUser(request, env);
     if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
-    let createdAt = new Date(user.created_at || Date.now());
-    if (Number.isNaN(createdAt.getTime())) createdAt = new Date();
     const rewards = (await env.DB.prepare('SELECT days, created_at FROM referral_rewards WHERE user_id = ? ORDER BY created_at, referral_id').bind(user.id).all()).results || [];
     const bonusDays = rewards.reduce((sum, row) => sum + Number(row.days), 0);
-    let trialEndsAt = new Date(createdAt.getTime() + 30 * 86400000);
-    for (const reward of rewards) {
-      const grantedAt = new Date(String(reward.created_at).replace(' ', 'T') + 'Z');
-      trialEndsAt = new Date(Math.max(trialEndsAt.getTime(), grantedAt.getTime()) + Number(reward.days) * 86400000);
-    }
-    const daysRemaining = Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / 86400000));
     const firstConfirmed = user.team_id ? await env.DB.prepare(
       `SELECT MIN(COALESCE(confirmed_at, created_at)) AS first_confirmed_at
        FROM reposts WHERE team_id = ? AND status = 'confirmed'`
     ).bind(user.team_id).first() : null;
     const hasConfirmedRepost = !!firstConfirmed?.first_confirmed_at;
-    const displayStatus = daysRemaining > 0
-      ? 'trial'
-      : (hasConfirmedRepost ? 'trial_complete_unverified' : 'trial_extended_until_first_confirmed_repost');
     return jsonResponse({
-      display_status: displayStatus,
-      trial_days: 30,
+      display_status: 'proof_of_concept_free',
+      access_mode: ACCESS_MODE,
+      payment_required: false,
+      paid_enrollment_optional: true,
+      success_target_percent: SUCCESS_TARGET_PERCENT,
+      commercial_limits: { sources: null, members: null, reposts: null, features: null },
+      trial_days: 0,
       referral_bonus_days: bonusDays,
-      trial_started_at: createdAt.toISOString(),
-      trial_ends_at: trialEndsAt.toISOString(),
-      days_remaining: daysRemaining,
+      trial_started_at: null,
+      trial_ends_at: null,
+      days_remaining: null,
       has_confirmed_repost: hasConfirmedRepost,
       first_confirmed_repost_at: firstConfirmed?.first_confirmed_at || null,
-      extension_policy: 'After day 30, free access continues until the first LinkedIn-confirmed repost. Failed, skipped, and unverified attempts do not end the extension.',
+      extension_policy: 'Free access for all accounts during proof-of-concept testing, with no trial expiry or subscription limits. Our target is 75% LinkedIn-confirmed repost success. Paid enrollment remains optional; reaching the target does not automatically enable charges or restrictions.',
       checkout_url: `${STRIPE_CHECKOUT_URL}?client_reference_id=${user.id}&prefilled_email=${encodeURIComponent(user.email || '')}`,
-      enforcement: 'not_configured',
-      note: 'Checkout completion and subscription activation are not verified until Stripe webhooks and entitlement storage are configured.'
+      enforcement: 'disabled_for_proof_of_concept',
+      note: 'Optional paid enrollment is retained for later use. Enrollment is not required to use any application feature.'
     });
   }
 

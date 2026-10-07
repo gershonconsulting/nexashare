@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { ACCESS_MODE, proofOfConceptProgress } from '../src/access-policy.js';
+assert.equal(ACCESS_MODE, 'proof_of_concept');
+assert.equal(proofOfConceptProgress(0,0).status,'no_attempts');
+assert.equal(proofOfConceptProgress(0,0).target_met,false);
+assert.equal(proofOfConceptProgress(3,1).target_met,true);
+assert.equal(proofOfConceptProgress(4,45).success_rate,8.2);
+assert.equal(proofOfConceptProgress(4,45).target_met,false);
+assert.equal(proofOfConceptProgress(7496,2504).success_rate,75);
+assert.equal(proofOfConceptProgress(7496,2504).target_met,false,'rounding cannot manufacture target achievement');
+assert.equal(proofOfConceptProgress(1,0).target_met,true);
+console.log('Proof-of-concept target checks passed.');
