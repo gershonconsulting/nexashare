@@ -3,6 +3,9 @@ name: Deploy NexaShare to Cloudflare
 # Production deployment can be run manually. A push to main also deploys the
 # current release so merged production changes are not left unpublished.
 on:
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
   push:
     branches:
@@ -43,11 +46,15 @@ jobs:
           node tests/growth.test.mjs
           node tests/content-guards.mjs
 
+      - name: Run proof-of-concept target checks
+        run: node tests/access-policy.test.mjs
+
       - name: Run delivery engine checks
         run: node tests/delivery-engine.test.mjs
 
       - name: Validate JavaScript and Chrome manifest
         run: |
+          node --check src/access-policy.js
           node --check src/index.js
           node --check src/worker.js
           node --check src/admin-report.js
@@ -64,6 +71,7 @@ jobs:
   deploy:
     name: Migrate D1 and deploy complete application
     needs: validate
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment: production
     steps:
