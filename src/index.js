@@ -1,3 +1,6 @@
+import { collectDailySeries } from './reporting.js';
+import { getIntelligence } from './intelligence.js';
+import { referralCode, attributeReferral, getReferralDashboard, handleReferralPayment } from './referrals.js';
 import { getCampaignHealth, markDeliveryProcessing, recordDeliveryOutcome } from './delivery-engine.js';
 import { buildAdminReportEmail, collectAdminReportData, reportRecipients, sendAdminDailyReport } from './admin-report.js';
 
@@ -222,8 +225,8 @@ async function handleAuth(request, env, ctx) {
   if (url.pathname === '/api/auth/linkedin') {
     const state = randomToken();
     await env.DB.prepare(
-      "INSERT INTO oauth_states (state_hash, team_name, expires_at) VALUES (?, ?, datetime('now', '+10 minutes'))"
-    ).bind(await sha256(state), '').run();
+      "INSERT INTO oauth_states (state_hash, team_name, referral_code, expires_at) VALUES (?, ?, ?, datetime('now', '+10 minutes'))"
+    ).bind(await sha256(state), '', referralCode(url.searchParams.get('ref') || getCookie(request, 'nexashare_ref'))).run();
     const linkedinUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${LINKEDIN_CLIENT_ID}&redirect_uri=${encodeURIComponent(LINKEDIN_REDIRECT_URI)}&scope=${encodeURIComponent(LINKEDIN_SCOPES)}&state=${encodeURIComponent(state)}`;
     return Response.redirect(linkedinUrl, 302);
   }
@@ -238,7 +241,7 @@ async function handleAuth(request, env, ctx) {
 
     const stateHash = await sha256(state);
     const stateRow = await env.DB.prepare(
-      "SELECT 1 AS valid FROM oauth_states WHERE state_hash = ? AND used_at IS NULL AND expires_at > datetime('now')"
+      "SELECT 1 AS valid, referral_code FROM oauth_states WHERE state_hash = ? AND used_at IS NULL AND expires_at > datetime('now')"
     ).bind(stateHash).first();
     if (!stateRow) return Response.redirect(`${APP_ORIGIN}/login.html?error=invalid_state`, 302);
     await env.DB.prepare("UPDATE oauth_states SET used_at = datetime('now') WHERE state_hash = ?").bind(stateHash).run();
@@ -329,6 +332,7 @@ async function handleAuth(request, env, ctx) {
           'INSERT INTO users (email, name, linkedin_id, linkedin_access_token, team_id, role) VALUES (?, ?, ?, ?, ?, ?)'
         ).bind(profile.email || '', profile.name || '', profile.sub, tokenData.access_token, teamId, 'admin').run();
         userId = result.meta.last_row_id;
+        await attributeReferral(env.DB, userId, stateRow.referral_code);
         const notification = sendRegistrationNotification(env, {
           id: userId,
           teamId,
@@ -417,6 +421,9 @@ async function handleAPI(request, env, ctx) {
         registration_notification: env.RESEND_API_KEY && env.REGISTRATION_NOTIFICATION_TO ? 'configured' : 'not_configured',
         daily_repost_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         current_extension_version: CURRENT_EXTENSION_VERSION,
+        application_version: '1.4.0',
+        released_at: '2026-10-07',
+        workers_ai: env.AI ? 'configured' : 'not_configured',
         admin_daily_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         admin_report_recipient: reportRecipients(env).join(', '),
         canonical_origin: APP_ORIGIN,
@@ -431,11 +438,33 @@ async function handleAPI(request, env, ctx) {
         registration_notification: env.RESEND_API_KEY && env.REGISTRATION_NOTIFICATION_TO ? 'configured' : 'not_configured',
         daily_repost_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         current_extension_version: CURRENT_EXTENSION_VERSION,
+        application_version: '1.4.0',
+        released_at: '2026-10-07',
+        workers_ai: env.AI ? 'configured' : 'not_configured',
         admin_daily_report: env.RESEND_API_KEY ? 'configured' : 'not_configured',
         admin_report_recipient: reportRecipients(env).join(', '),
         canonical_origin: APP_ORIGIN,
         checked_at: new Date().toISOString()
       }, 503);
+    }
+  }
+
+  if (url.pathname === '/api/referrals/stripe-webhook' && request.method === 'POST') return handleReferralPayment(request, env);
+  if (['/api/referrals', '/api/reporting/daily', '/api/intelligence'].includes(url.pathname)) {
+    const user = await getUser(request, env);
+    if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const days = Number(url.searchParams.get('days') || 30);
+    if (![7, 30, 90].includes(days)) return jsonResponse({ error: 'Choose 7, 30, or 90 days' }, 400);
+    if (request.method !== 'GET' && !(url.pathname === '/api/intelligence' && request.method === 'POST')) return jsonResponse({ error: 'Method not allowed' }, 405);
+    if (request.method === 'POST' && request.headers.get('Origin') !== APP_ORIGIN) return jsonResponse({ error: 'Invalid request origin' }, 403);
+    try {
+      if (url.pathname === '/api/referrals') return jsonResponse(await getReferralDashboard(env.DB, user, Boolean(env.STRIPE_WEBHOOK_SECRET)));
+      if (url.pathname === '/api/reporting/daily') return jsonResponse(await collectDailySeries(env.DB, user.id, days));
+      const result = await getIntelligence(env, user, days, request.method === 'POST');
+      return jsonResponse(result, result.status || 200);
+    } catch (error) {
+      console.error('Growth feature failed', { path: url.pathname, message: error?.message });
+      return jsonResponse({ error: 'This section is temporarily unavailable. Please try again later.' }, 503);
     }
   }
 
@@ -450,7 +479,13 @@ async function handleAPI(request, env, ctx) {
     if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
     let createdAt = new Date(user.created_at || Date.now());
     if (Number.isNaN(createdAt.getTime())) createdAt = new Date();
-    const trialEndsAt = new Date(createdAt.getTime() + 30 * 86400000);
+    const rewards = (await env.DB.prepare('SELECT days, created_at FROM referral_rewards WHERE user_id = ? ORDER BY created_at, referral_id').bind(user.id).all()).results || [];
+    const bonusDays = rewards.reduce((sum, row) => sum + Number(row.days), 0);
+    let trialEndsAt = new Date(createdAt.getTime() + 30 * 86400000);
+    for (const reward of rewards) {
+      const grantedAt = new Date(String(reward.created_at).replace(' ', 'T') + 'Z');
+      trialEndsAt = new Date(Math.max(trialEndsAt.getTime(), grantedAt.getTime()) + Number(reward.days) * 86400000);
+    }
     const daysRemaining = Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / 86400000));
     const firstConfirmed = user.team_id ? await env.DB.prepare(
       `SELECT MIN(COALESCE(confirmed_at, created_at)) AS first_confirmed_at
@@ -463,13 +498,14 @@ async function handleAPI(request, env, ctx) {
     return jsonResponse({
       display_status: displayStatus,
       trial_days: 30,
+      referral_bonus_days: bonusDays,
       trial_started_at: createdAt.toISOString(),
       trial_ends_at: trialEndsAt.toISOString(),
       days_remaining: daysRemaining,
       has_confirmed_repost: hasConfirmedRepost,
       first_confirmed_repost_at: firstConfirmed?.first_confirmed_at || null,
       extension_policy: 'After day 30, free access continues until the first LinkedIn-confirmed repost. Failed, skipped, and unverified attempts do not end the extension.',
-      checkout_url: STRIPE_CHECKOUT_URL,
+      checkout_url: `${STRIPE_CHECKOUT_URL}?client_reference_id=${user.id}&prefilled_email=${encodeURIComponent(user.email || '')}`,
       enforcement: 'not_configured',
       note: 'Checkout completion and subscription activation are not verified until Stripe webhooks and entitlement storage are configured.'
     });
@@ -964,6 +1000,11 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
+    if (url.pathname.startsWith('/r/')) {
+      const code = referralCode(url.pathname.slice(3));
+      if (!code || !await env.DB.prepare('SELECT user_id FROM referral_codes WHERE code = ?').bind(code).first()) return new Response('Referral link not found', { status: 404 });
+      return new Response(null, { status: 302, headers: { Location: `${APP_ORIGIN}/register.html`, 'Set-Cookie': setCookie('nexashare_ref', code, 86400 * 30), 'Cache-Control': 'no-store' } });
+    }
     if (url.pathname.startsWith('/api/')) return handleAPI(request, env, ctx);
     return env.ASSETS.fetch(request);
   },

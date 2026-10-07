@@ -1,3 +1,4 @@
+import { collectDaySummary, rateLabel } from './reporting.js';
 import app from './index.js';
 import { sendAdminDailyReport } from './admin-report.js';
 import { sendSundayReports } from './weekly-report.js';
@@ -54,24 +55,24 @@ function deltaColour(today, yesterday, higherIsBetter = true) {
 }
 
 export function buildDailyReport(user, rows, previousRows, signals = {}) {
-  const today = summarize(rows);
-  const before = summarize(previousRows);
+  const today = signals.todaySummary || summarize(rows);
+  const before = signals.previousSummary || summarize(previousRows);
   const firstName = String(user.name || '').trim().split(/\s+/)[0] || 'there';
   const dashboardUrl = `${APP_ORIGIN}/dashboard.html#reposts`;
 
-  const ranYesterday = Boolean(signals.ranYesterday);
+  const ranYesterday = Boolean(signals.ranYesterday) || today.processed > 0;
   const installedVersion = signals.extensionVersion || null;
   const outdated = Boolean(installedVersion) && installedVersion !== CURRENT_EXTENSION_VERSION;
   const neverSeen = !installedVersion;
 
   const summary = ranYesterday
-    ? `${today.confirmed} successful repost${today.confirmed === 1 ? '' : 's'}, ${today.failed} failure${today.failed === 1 ? '' : 's'}, and ${today.skipped} skipped/already reposted in the last 24 hours.`
-    : 'The daily job did not run yesterday. The figures below are not a quiet day — they are a missing day.';
+    ? `${today.confirmed} successful repost${today.confirmed === 1 ? '' : 's'}, ${today.failed} failure${today.failed === 1 ? '' : 's'}, and ${today.skipped} skipped/already reposted on the reporting day (UTC).`
+    : 'No extension activity was recorded yesterday. Check the computer running your automation.';
 
   // ---- alarm banners -------------------------------------------------------
   const banners = [];
   if (!ranYesterday) {
-    banners.push(`<tr><td style="padding:0 26px 18px"><div style="background:#fef3f2;border-left:5px solid #b42318;border-radius:8px;padding:16px 18px"><div style="font-size:17px;font-weight:800;color:#7a271a">THE DAILY JOB DID NOT RUN</div><div style="margin-top:7px;font-size:14px;line-height:1.6;color:#7a271a">NexaShare recorded no extension run for your account yesterday, so nothing was checked and nothing could be reposted. This is not a slow day &mdash; the automation did not execute. Open the dashboard, confirm Chrome is running with the extension installed and signed in to LinkedIn, then use <b>Run test now</b>.</div></div></td></tr>`);
+    banners.push(`<tr><td style="padding:0 26px 18px"><div style="background:#fef3f2;border-left:5px solid #b42318;border-radius:8px;padding:16px 18px"><div style="font-size:17px;font-weight:800;color:#7a271a">THE DAILY JOB DID NOT RUN</div><div style="margin-top:7px;font-size:14px;line-height:1.6;color:#7a271a">NexaShare recorded neither a run nor a repost outcome yesterday. It cannot verify whether the automation ran. This is not a slow day &mdash; the automation did not execute. Open the dashboard, confirm Chrome is running with the extension installed and signed in to LinkedIn, then use <b>Run test now</b>.</div></div></td></tr>`);
   }
   if (outdated) {
     banners.push(`<tr><td style="padding:0 26px 18px"><div style="background:#fffaeb;border-left:5px solid #b54708;border-radius:8px;padding:16px 18px"><div style="font-size:16px;font-weight:800;color:#7a2e0e">Outdated extension installed</div><div style="margin-top:7px;font-size:14px;line-height:1.6;color:#7a2e0e">This browser is running v${escapeHtml(installedVersion)}; the current release is <b>v${CURRENT_EXTENSION_VERSION}</b>. Older builds miss posts and can fail to confirm reposts. Download the current package from the dashboard and reload it in Chrome.</div></div></td></tr>`);
@@ -102,7 +103,7 @@ export function buildDailyReport(user, rows, previousRows, signals = {}) {
         const links = `<a href="${escapeHtml(row.original_post_url)}">Original</a>${row.repost_url ? ` &middot; <a href="${escapeHtml(row.repost_url)}">Repost</a>` : ''}`;
         return `<tr><td style="padding:11px;border-bottom:1px solid #e5e7eb;vertical-align:top">${escapeHtml(row.company_name || 'LinkedIn source')}</td><td style="padding:11px;border-bottom:1px solid #e5e7eb;vertical-align:top;font-weight:700;color:${isFailure ? '#b42318' : '#344054'}">${escapeHtml(outcome)}${detail}</td><td style="padding:11px;border-bottom:1px solid #e5e7eb;vertical-align:top">${links}</td></tr>`;
       }).join('')
-    : `<tr><td colspan="3" style="padding:18px;color:#667085">${ranYesterday ? 'No repost outcomes were recorded in the last 24 hours. NexaShare is still monitoring your configured sources.' : 'No outcomes, because the job did not run. See the alarm above.'}</td></tr>`;
+    : `<tr><td colspan="3" style="padding:18px;color:#667085">${ranYesterday ? 'No repost outcomes were recorded on the reporting day (UTC). NexaShare is still monitoring your configured sources.' : 'No outcomes, because the job did not run. See the alarm above.'}</td></tr>`;
 
   // ---- plain text ----------------------------------------------------------
   const textAlarm = ranYesterday ? '' : 'ALARM: THE DAILY JOB DID NOT RUN YESTERDAY. Nothing was checked and nothing was reposted.\n\n';
@@ -116,16 +117,18 @@ export function buildDailyReport(user, rows, previousRows, signals = {}) {
         const repost = row.repost_url ? `\nRepost: ${row.repost_url}` : '';
         return `${source}: ${normalizeStatus(row.status)}${detail}\nOriginal: ${row.original_post_url}${repost}`;
       }).join('\n\n')
-    : 'No repost outcomes were recorded in the last 24 hours.';
+    : 'No repost outcomes were recorded on the reporting day (UTC).';
 
-  const subjectPrefix = ranYesterday ? '' : 'ACTION NEEDED — job did not run · ';
+  const subjectPrefix = ranYesterday ? '' : 'ACTION NEEDED — no run recorded · ';
+  const reportDate = signals.reportDate || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const status = !ranYesterday || (!today.confirmed && today.failed) ? 'Red' : today.failed || outdated || neverSeen ? 'Orange' : today.confirmed ? 'Green' : 'Quiet day';
 
   return {
     to: user.email,
     from: DAILY_REPORT_FROM,
-    subject: `${subjectPrefix}NexaShare daily report: ${today.confirmed} successful, ${today.failed} failed`,
-    text: `Hi ${firstName},\n\n${textAlarm}${textOutdated}${summary}\n\n${textProgress}${textRows}\n\nReview your full repost history: ${dashboardUrl}`,
-    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:720px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:${ranYesterday ? '#0a66c2' : '#b42318'};color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare daily activity report</div><div style="margin-top:7px">${escapeHtml(summary)}</div></td></tr>${banners.join('')}${progressTable}<tr><td style="padding:0 26px 26px"><p style="font-size:16px">Hi ${escapeHtml(firstName)},</p><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:10px;background:#f8fafc">Source</th><th align="left" style="padding:10px;background:#f8fafc">Outcome / reason</th><th align="left" style="padding:10px;background:#f8fafc">Links</th></tr></thead><tbody>${itemHtml}</tbody></table><p style="text-align:center;margin:26px 0 4px"><a href="${dashboardUrl}" style="display:inline-block;background:#0a66c2;color:#fff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:9px">Review repost history</a></p><p style="font-size:12px;color:#667085">A repost is counted as successful only after LinkedIn confirmation. Failure reasons are shown when the extension reported one. Confirmation rate is measured against attempts, so skipped and already-reposted items are excluded from it.</p></td></tr></table></td></tr></table></body></html>`
+    subject: `${subjectPrefix}NexaShare daily report · ${reportDate} UTC · ${rateLabel(today.confirmed, today.failed)} · ${today.confirmed} successful, ${today.failed} failed`,
+    text: `Status: ${status} | Reporting date: ${reportDate} (UTC)\nSuccess: ${rateLabel(today.confirmed, today.failed)}\n\nHi ${firstName},\n\n${textAlarm}${textOutdated}${summary}\n\n${textProgress}${textRows}\n\nReview your full repost history: ${dashboardUrl}`,
+    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:720px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:${ranYesterday ? '#0a66c2' : '#b42318'};color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare daily activity report</div><div style="margin-top:7px">${escapeHtml(summary)}</div><div style="margin-top:10px;font-weight:700">${escapeHtml(status)} · ${reportDate} UTC · ${escapeHtml(rateLabel(today.confirmed, today.failed))}</div></td></tr>${banners.join('')}${progressTable}<tr><td style="padding:0 26px 26px"><p style="font-size:16px">Hi ${escapeHtml(firstName)},</p><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:10px;background:#f8fafc">Source</th><th align="left" style="padding:10px;background:#f8fafc">Outcome / reason</th><th align="left" style="padding:10px;background:#f8fafc">Links</th></tr></thead><tbody>${itemHtml}</tbody></table><p style="text-align:center;margin:26px 0 4px"><a href="${dashboardUrl}" style="display:inline-block;background:#0a66c2;color:#fff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:9px">Review repost history</a></p><p style="font-size:12px;color:#667085">A repost is counted as successful only after LinkedIn confirmation. Failure reasons are shown when the extension reported one. Confirmation rate is measured against attempts, so skipped and already-reposted items are excluded from it.</p></td></tr></table></td></tr></table></body></html>`
   };
 }
 
@@ -136,7 +139,8 @@ async function sendWithResend(env, message) {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Idempotency-Key': `nexashare-daily-${message.to}-${new Date().toISOString().slice(0, 10)}`
     },
     body: JSON.stringify({
       from: message.from,
@@ -205,7 +209,9 @@ async function sendDailyUserReports(env) {
     const signals = {
       ranYesterday: Number(run?.runs || 0) > 0,
       extensionVersion: token?.extension_version || null,
-      lastSeenAt: token?.last_seen_at || null
+      lastSeenAt: token?.last_seen_at || null,
+      todaySummary: await collectDaySummary(env.DB, user.id, '-1 day'),
+      previousSummary: await collectDaySummary(env.DB, user.id, '-2 day')
     };
 
     try {

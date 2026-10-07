@@ -40,6 +40,7 @@ const db = {
       bind() { return this; },
       async all() {
         if (sql.includes('FROM users')) return { results: [user] };
+        if (sql.includes('GROUP BY day')) return { results: [] };
         if (sql.includes('SELECT company_name')) return { results: activity.outcomes };
         throw new Error(`Unexpected all query: ${sql}`);
       },

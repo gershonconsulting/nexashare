@@ -98,7 +98,7 @@ assert.equal(degraded.delivery.pendingRetries, 0);
 
 // --- rendering --------------------------------------------------------------
 const email = buildAdminReportEmail(data, { date: new Date('2026-09-03T06:00:00Z') });
-assert.equal(email.subject, 'NexaShare Extension Report — September 3, 2026');
+assert.equal(email.subject, 'NexaShare Extension Report — September 3, 2026 · 80% success · 12 confirmed, 3 failed');
 assert.equal(email.to, ADMIN_REPORT_TO);
 assert.equal(email.from, 'NexaShare <nexashare@gershon.ai>');
 assert.match(email.html, /12 confirmed, 3 failed, 3 skipped across 4 active extensions/);
