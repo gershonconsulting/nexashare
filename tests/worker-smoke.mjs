@@ -182,7 +182,7 @@ assert.match(dashboardSource, /EXPECTED_EXTENSION_VERSION\s*=\s*'1\.2\.24'/);
 assert.match(dashboardSource, /Reload instructions/);
 assert.match(dashboardSource, /extension is not connected/);
 assert.match(dashboardSource, /extension-setup\.html/);
-assert.match(dashboardSource, /Free access extended/);
+assert.match(dashboardSource, /Free proof-of-concept access/);
 assert.match(dashboardSource, /id="momentumGrid"/);
 assert.match(dashboardSource, /function renderMomentum/);
 assert.match(dashboardSource, /Current streak/);
