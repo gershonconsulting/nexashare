@@ -25,3 +25,6 @@ custom_domain = true
 [[routes]]
 pattern = "www.nexashare.com"
 custom_domain = true
+
+[ai]
+binding = "AI"
