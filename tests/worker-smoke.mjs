@@ -159,7 +159,7 @@ assert.match(workerSource, /REGISTRATION_NOTIFICATION_TO/);
 assert.match(workerSource, /New NexaShare registration/);
 assert.match(workerSource, /if \(existingUser\)[\s\S]*else \{[\s\S]*sendRegistrationNotification/);
 assert.match(workerSource, /Only LinkedIn-confirmed reposts are counted as successful/);
-assert.equal(manifest.version, '1.2.25');
+assert.equal(manifest.version, '1.2.26');
 assert.equal(manifest.icons['128'], 'icons/icon128.png');
 assert.equal(manifest.action.default_icon['32'], 'icons/icon32.png');
 assert.ok(manifest.permissions.includes('alarms'));
@@ -266,7 +266,7 @@ assert.match(workerSource, /current_extension_version: CURRENT_EXTENSION_VERSION
 assert.match(workerSource, /\/api\/extension\/seen/);
 assert.match(workerSource, /INSERT INTO extension_runs/);
 assert.match(workerSource, /INSERT OR IGNORE INTO reposts/);
-assert.equal(manifest.version, '1.2.25');
+assert.equal(manifest.version, '1.2.26');
 assert.match(dashboardSource, /\/api\/extension\/seen/);
 
 // --- platform-wide extension report -----------------------------------------
