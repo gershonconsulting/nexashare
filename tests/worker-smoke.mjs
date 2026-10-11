@@ -175,6 +175,10 @@ assert.match(dashboardSource, /Your repost/);
 assert.match(dashboardSource, /Company post/);
 assert.match(dashboardSource, /Post text/);
 assert.match(dashboardSource, /r\.post_text/);
+assert.match(dashboardSource, /id="dateSort"/);
+assert.match(dashboardSource, /Newest first/);
+assert.match(dashboardSource, /Oldest first/);
+assert.match(dashboardSource, /function repostTime/);
 assert.match(dashboardSource, /Run test now/);
 assert.match(dashboardSource, /runRepostCheck/);
 assert.match(dashboardSource, /id="extensionUpdateBanner"/);
@@ -296,3 +300,4 @@ assert.deepEqual(await cronPromise, [
 ]);
 
 console.log('Worker and extension smoke checks passed.');
+
