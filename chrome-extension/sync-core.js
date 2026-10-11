@@ -45,6 +45,31 @@ async function ensureDailyAlarm() {
   if (!existing) chrome.alarms.create(DAILY_ALARM, { delayInMinutes: 15, periodInMinutes: 1440 });
 }
 
+async function ensureCommandAlarm() {
+  const existing = await chrome.alarms.get(COMMAND_ALARM);
+  if (!existing) chrome.alarms.create(COMMAND_ALARM, { delayInMinutes: 1, periodInMinutes: 1 });
+}
+
+async function pollServerCommands() {
+  const response = await authenticatedFetch('/api/extension/commands/next');
+  const command = response?.command;
+  if (!command) return { status: 'idle' };
+  let status = 'completed';
+  let result;
+  try {
+    const name = String(command.command || '').toLowerCase().replace(/[- ]/g, '_');
+    if (!['run_now', 'run_repost', 'sync_now', 'force_repost'].includes(name)) throw new Error('Unsupported extension command: ' + command.command);
+    result = await runFullSync({ trigger: 'server-command' });
+  } catch (error) {
+    status = 'failed';
+    result = { error: String(error) };
+  }
+  await authenticatedFetch('/api/extension/commands/' + command.id + '/complete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, result })
+  });
+  return { status, commandId: command.id, result };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'syncNow') {
     runFullSync({ trigger: 'manual' }).then(result => sendResponse({ ok: true, result })).catch(error => sendResponse({ ok: false, error: String(error) }));
