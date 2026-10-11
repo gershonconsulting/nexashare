@@ -5,7 +5,8 @@ const REPOST_DELAY_MS = 3000;
 const SOURCE_DELAY_MS = 5000;
 const PAGE_LOAD_MS = 6000;
 const POST_DISCOVERY_ATTEMPTS = 16;
-const MAX_LOG_ENTRIES = 200;
+const MAX_LOG_ENTRIES = 500;
+let activeRunId = null;
 const DAILY_ALARM = 'dailyRepost';
 const RETRY_ALARM = 'retryRepost';
 const COMMAND_ALARM = 'serverCommands';
@@ -16,7 +17,7 @@ const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 let activeSyncPromise = null;
 
 async function log(level, message, data) {
-  const entry = { ts: new Date().toISOString(), level, msg: message, data: data === undefined ? null : data };
+  const entry = { ts: new Date().toISOString(), runId: activeRunId, level, msg: message, data: data === undefined ? null : data };
   console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log']('[NexaShare]', message, data || '');
   const stored = await chrome.storage.local.get('nexashareLog');
   await chrome.storage.local.set({ nexashareLog: [entry, ...(stored.nexashareLog || [])].slice(0, MAX_LOG_ENTRIES) });
@@ -145,7 +146,8 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
       ...(companyData.companies || []).map(item => ({ ...item, sourceType: 'company' })),
       ...(peopleData.people || []).map(item => ({ ...item, sourceType: 'person' }))
     ];
-    await chrome.storage.local.set({ companies });
+    await chrome.storage.local.set({ companies, syncProgress: { runId: activeRunId, state: 'running', stage: `Loaded ${companies.length} configured sources`, trigger, ts: new Date().toISOString() } });
+    await log('info', 'sources:loaded', { count: companies.length });
   } catch (error) {
     await log('error', 'configuration:failed', { error: String(error) });
     setBadge('!', '#dc2626');
@@ -158,6 +160,7 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
     return { status: 'no-companies' };
   }
 
+  await chrome.storage.local.set({ syncProgress: { runId: activeRunId, state: 'running', stage: 'Checking LinkedIn session', trigger, ts: new Date().toISOString() } });
   if (!(await ensureLinkedInSession())) {
     await log('warn', 'LinkedIn sign-in is required. NexaShare opened LinkedIn automatically, but no signed-in session was detected.', { trigger });
     setBadge('!', '#dc2626');
@@ -166,6 +169,7 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
     return waiting;
   }
 
+  await log('info', 'linkedin:connected', {});
   const pendingStore = await chrome.storage.local.get('pendingOutcomes');
   const outcomes = [...(pendingStore.pendingOutcomes || [])];
   const priorPendingCount = outcomes.length;
@@ -221,7 +225,10 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postUrl: post.url })
           });
+          await chrome.storage.local.set({ syncProgress: { runId: activeRunId, state: 'running', stage: `Attempting repost for ${company.name || company.vanity || 'source'}`, source: company.name || company.vanity || '', trigger, ts: new Date().toISOString() } });
+          await log('info', 'repost:attempt', { company: company.name || company.vanity, postUrl: post.url });
           const result = await repostContent(post);
+          await log(result.confirmed ? 'info' : 'error', result.confirmed ? 'repost:confirmed' : 'repost:failed', { company: company.name || company.vanity, detail: result.detail, repostUrl: result.repostUrl || null });
           outcomes.push(makeOutcome(company, post, result.confirmed ? 'confirmed' : 'failed', result.detail, result.repostUrl));
           if (result.confirmed) rememberPost(seen, post.id);
         } catch (error) {
