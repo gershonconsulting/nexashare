@@ -710,7 +710,7 @@ async function clickAndConfirmRepost() {
     return !!box && box.width > 0 && box.height > 0 && getComputedStyle(item).visibility !== 'hidden' && getComputedStyle(item).display !== 'none';
   };
   const describe = item => `${item?.getAttribute?.('aria-label') || ''} ${item?.getAttribute?.('data-view-name') || ''} ${item?.textContent || ''}`.replace(/\s+/g, ' ').trim().toLowerCase();
-  const isRepostControl = value => /\brepost\b|\breshare\b|republier|republication|reposten/.test(value);
+  const isRepostControl = value => /\brepost\b|\breshare\b|republier|republication|reposter|reposten|teilen|erneut teilen|volver a publicar|compartir de nuevo|ripubblica|ricondividi/.test(value);
   const isCommentShare = value => /with your thoughts|quote|ajouter (?:vos|mes) réflexions|avec (?:vos|mes) réflexions|avec un commentaire|gedanken hinzufügen|mit (?:ihren|deinen|eigenen) gedanken|mit kommentar/.test(value);
   const isUndoRepost = value => /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/.test(value);
   const isInstantRepost = value => /^(?:repost|reshare) instantly\b/.test(value)
@@ -787,10 +787,10 @@ async function clickAndConfirmRepostInPlace(matchText) {
     || /^republier\b[^]*instantan/.test(value)
     || /^(?:jetzt|sofort|direkt) reposten\b/.test(value)
     || /^reposten\b/.test(value);
-  const isUndoRepost = value => /undo repost|remove repost|annuler la republication|supprimer la republication/.test(value);
-  const isSuccessNotice = value => /repost successful|reposted|post shared|shared successfully|républication réussie|republication réussie|publication republiée|a été republié/.test(value) && !/could not|error|failed|impossible|erreur|échec/.test(value);
-  const isViewRepost = value => /view repost|view reshare|voir la republication/.test(value);
-  const isRepostControl = item => /^(?:repost|republier|reposten)$/i.test((item.getAttribute('aria-label') || '').trim());
+  const isUndoRepost = value => /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen|repost löschen|nicht mehr teilen/.test(value);
+  const isSuccessNotice = value => /repost successful|reposted|post shared|shared successfully|républication réussie|republication réussie|publication republiée|a été republié|erfolgreich repostet|beitrag (?:wurde )?repostet|repost erfolgreich/.test(value) && !/could not|error|failed|impossible|erreur|échec|fehlgeschlagen|fehler/.test(value);
+  const isViewRepost = value => /view repost|view reshare|voir la republication|republication anzeigen|repost anzeigen/.test(value);
+  const isRepostControl = item => {\n    const aria = (item.getAttribute('aria-label') || '').trim();\n    const view = (item.getAttribute('data-view-name') || '').trim();\n    if (/repost|reshare/i.test(view)) return true;\n    if (/^(?:repost|reshare|republier|reposter|reposten|teilen|erneut teilen|volver a publicar|ripubblica|ricondividi)$/i.test(aria)) return true;\n    return item.classList.contains('social-reshare-button');\n  };
 
   const wanted = String(matchText || '').replace(/\s+/g, ' ').trim().slice(0, 240).toLowerCase();
   const anchors = [...document.querySelectorAll('[aria-label]')]
