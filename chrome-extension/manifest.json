@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NexaShare - LinkedIn Content Amplifier",
-  "version": "1.2.24",
+  "version": "1.2.25",
   "description": "Repost configured company content through LinkedIn in the background and report confirmed outcomes.",
   "permissions": [
     "alarms",
