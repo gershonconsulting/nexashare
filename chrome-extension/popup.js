@@ -7,6 +7,9 @@ document.getElementById('ver').textContent = 'Version ' + installedVersion;
 const statusEl = document.getElementById('status');
 const lastEl = document.getElementById('last-sync');
 const companiesEl = document.getElementById('companies');
+const activityStateEl = document.getElementById('activity-state');
+const activityStageEl = document.getElementById('activity-stage');
+const activityLogEl = document.getElementById('activity-log');
 
 function show(msg, kind) {
   statusEl.innerHTML = '<div class="status ' + kind + '">' + msg + '</div>';
@@ -101,6 +104,23 @@ function renderLog() {
     lastEl.innerHTML = html;
   });
 }
+
+function renderActivity() {
+  chrome.storage.local.get(['syncProgress', 'nexashareLog'], function (data) {
+    var p = data.syncProgress || {};
+    activityStateEl.textContent = p.state === 'running' ? 'Running…' : (p.state === 'failed' ? 'Needs attention' : (p.state === 'complete' ? 'Complete' : 'Idle'));
+    activityStageEl.textContent = p.stage || 'Ready to sync.';
+    var entries = (data.nexashareLog || []).filter(function(e){ return !p.runId || e.runId === p.runId; }).slice(0, 40);
+    activityLogEl.innerHTML = entries.map(function(ev){
+      var cls = ev.level === 'error' ? ' error' : (ev.msg === 'repost:confirmed' || ev.msg === 'run:done' ? ' ok' : '');
+      var detail = ev.data && (ev.data.company || ev.data.detail) ? ' — ' + escapeHtml(ev.data.company || ev.data.detail) : '';
+      return '<div class="activity-row' + cls + '"><strong>' + escapeHtml(ev.msg) + '</strong>' + detail + '</div>';
+    }).join('') || '<div style="color:#9ca3af">No activity yet.</div>';
+  });
+}
+chrome.storage.onChanged.addListener(function(changes, area) {
+  if (area === 'local' && (changes.syncProgress || changes.nexashareLog)) renderActivity();
+});
 
 // --- Sync Now button ---
 document.getElementById('sync-now').addEventListener('click', function (e) {
