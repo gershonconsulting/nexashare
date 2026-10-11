@@ -790,11 +790,20 @@ async function clickAndConfirmRepostInPlace(matchText) {
   const isUndoRepost = value => /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen|repost löschen|nicht mehr teilen/.test(value);
   const isSuccessNotice = value => /repost successful|reposted|post shared|shared successfully|républication réussie|republication réussie|publication republiée|a été republié|erfolgreich repostet|beitrag (?:wurde )?repostet|repost erfolgreich/.test(value) && !/could not|error|failed|impossible|erreur|échec|fehlgeschlagen|fehler/.test(value);
   const isViewRepost = value => /view repost|view reshare|voir la republication|republication anzeigen|repost anzeigen/.test(value);
-  const isRepostControl = item => {\n    const aria = (item.getAttribute('aria-label') || '').trim();\n    const view = (item.getAttribute('data-view-name') || '').trim();\n    if (/repost|reshare/i.test(view)) return true;\n    if (/^(?:repost|reshare|republier|reposter|reposten|teilen|erneut teilen|volver a publicar|ripubblica|ricondividi)$/i.test(aria)) return true;\n    return item.classList.contains('social-reshare-button');\n  };
+  const isRepostControl = item => {
+    const aria = (item.getAttribute('aria-label') || '').trim();
+    const view = (item.getAttribute('data-view-name') || '').trim();
+    if (/repost|reshare/i.test(view)) return true;
+    if (/^(?:repost|reshare|republier|reposter|reposten|teilen|erneut teilen|volver a publicar|ripubblica|ricondividi)$/i.test(aria)) return true;
+    return item.classList.contains('social-reshare-button');
+  };
 
   const wanted = String(matchText || '').replace(/\s+/g, ' ').trim().slice(0, 240).toLowerCase();
-  const anchors = [...document.querySelectorAll('[aria-label]')]
-    .filter(node => /^Open control menu for post by /i.test(node.getAttribute('aria-label') || ''));
+  const anchors = [...document.querySelectorAll('[aria-label], [data-view-name]')]
+    .filter(node => {
+      const value = ((node.getAttribute('aria-label') || '') + ' ' + (node.getAttribute('data-view-name') || '')).trim();
+      return /open control menu for post by|steuerungsmenü.*beitrag|kontrollmenü.*beitrag|menü.*beitrag|menu.*publication|control menu|feed.*control/i.test(value);
+    });
   let card = null;
   for (const anchor of anchors) {
     let node = anchor;
