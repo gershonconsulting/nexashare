@@ -26,6 +26,13 @@
     .company-status.on { background: #d1fae5; color: #065f46; }
     .company-status.off { background: #fef3c7; color: #92400e; }
     .section-title { font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .activity { margin: 10px 0 12px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; background: #fff; }
+    .activity-head { display:flex; justify-content:space-between; align-items:center; font-size:12px; font-weight:600; }
+    .activity-stage { margin-top:7px; font-size:12px; line-height:1.4; }
+    .activity-log { margin-top:8px; max-height:180px; overflow:auto; font-size:10px; line-height:1.45; background:#f9fafb; padding:6px; border-radius:5px; }
+    .activity-row { padding:2px 0; border-bottom:1px solid #f3f4f6; }
+    .activity-row.error { color:#b91c1c; }
+    .activity-row.ok { color:#047857; }
     .last { margin-top: 12px; padding-top: 10px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; }
     .add-form { display: none; margin: 8px 0; }
     .add-form input { width: 100%; padding: 8px; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 6px; box-sizing: border-box; margin-bottom: 6px; }
@@ -45,6 +52,7 @@
   <button id="sync-now" class="btn"><span>&#x1F504;</span> Sync now</button>
 
   <div id="status"></div>
+  <div id="activity" class="activity"><div class="activity-head"><span>Sync activity</span><span id="activity-state">Idle</span></div><div id="activity-stage" class="activity-stage">Ready to sync.</div><div id="activity-log" class="activity-log"></div></div>
 
   <div class="section-title">Companies</div>
   <div id="companies" class="companies">
