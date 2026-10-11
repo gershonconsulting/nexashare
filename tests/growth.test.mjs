@@ -62,7 +62,7 @@ assert.equal(week.to,'2026-10-06'); assert.equal(week.totals.failed,35,'exclusiv
 sqlite.exec("UPDATE reposts SET attempted_at = datetime('now','-1 day') WHERE user_id=1 AND company_name='Acme'");
 const summary = await collectDaySummary(db,1,'-1 day');
 assert.equal(summary.confirmed,105); assert.equal(summary.rate,75);
-const daily = buildDailyReport({name:'One',email:'one@example.com'},[{status:'confirmed'}],[],{todaySummary:summary,ranYesterday:false,extensionVersion:'1.2.26'});
+const daily = buildDailyReport({name:'One',email:'one@example.com'},[{status:'confirmed'}],[],{todaySummary:summary,ranYesterday:false,extensionVersion:'1.2.27'});
 assert.match(daily.subject,/75% success/); assert.match(daily.subject,/105 successful, 35 failed/);
 assert.doesNotMatch(daily.subject,/job did not run/,'recorded outcomes establish activity');
 

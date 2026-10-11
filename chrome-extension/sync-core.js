@@ -780,7 +780,10 @@ async function clickAndConfirmRepost() {
         // LinkedIn's current popup uses role=button elements inside generic
         // containers, not its former role=menu/artdeco markup.  Match the visible
         // direct-share action; never choose the thoughts/quote path.
-        return labelled(item, isInstantRepost) && !labelled(item, isCommentShare);
+        // Never select the original repost control as the popup action. In German,
+        // the control itself is labelled "Reposten", which also matches the direct-
+        // repost predicate and would otherwise be clicked again, closing the menu.
+        return item !== button && labelled(item, isInstantRepost) && !labelled(item, isCommentShare);
       });
   }
   if (!action) return { confirmed: false, detail: "NexaShare opened the repost menu but could not identify LinkedIn's visible Repost instantly choice." };
@@ -865,7 +868,7 @@ async function clickAndConfirmRepostInPlace(matchText) {
     await new Promise(resolve => setTimeout(resolve, 300));
     action = [...document.querySelectorAll('[role="menuitem"], [role="option"], button, [role="button"], li, .artdeco-dropdown__item')]
       .filter(isVisible)
-      .find(item => labelled(item, isInstantRepost) && !labelled(item, isCommentShare));
+      .find(item => item !== button && labelled(item, isInstantRepost) && !labelled(item, isCommentShare));
   }
   if (!action) return { confirmed: false, detail: "NexaShare opened the repost menu but could not identify LinkedIn's visible direct repost choice." };
   action.scrollIntoView({ block: 'center', inline: 'center' });
