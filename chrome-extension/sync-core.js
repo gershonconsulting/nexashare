@@ -127,7 +127,11 @@ function runFullSync(options = {}) {
     log('warn', 'run:already-active', { requestedTrigger: options.trigger || 'manual' });
     return activeSyncPromise;
   }
-  activeSyncPromise = runFullSyncUnlocked(options).finally(() => { activeSyncPromise = null; });
+  activeRunId = crypto.randomUUID();
+  activeSyncPromise = runFullSyncUnlocked(options).finally(() => {
+    activeSyncPromise = null;
+    activeRunId = null;
+  });
   return activeSyncPromise;
 }
 
@@ -148,6 +152,7 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
     ];
     await chrome.storage.local.set({ companies, syncProgress: { runId: activeRunId, state: 'running', stage: `Loaded ${companies.length} configured sources`, trigger, ts: new Date().toISOString() } });
     await log('info', 'sources:loaded', { count: companies.length });
+    await captureRunDiagnostic('run_started', { trigger, sourceCount: companies.length, extensionVersion: EXTENSION_VERSION });
   } catch (error) {
     await log('error', 'configuration:failed', { error: String(error) });
     setBadge('!', '#dc2626');
@@ -166,6 +171,7 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
     setBadge('!', '#dc2626');
     const waiting = { status: 'not-logged-in', trigger, ts: new Date().toISOString() };
     await chrome.storage.local.set({ lastSyncResult: waiting });
+    await captureRunDiagnostic('run_blocked', { trigger, reason: 'linkedin_login_required', extensionVersion: EXTENSION_VERSION });
     return waiting;
   }
 
@@ -284,6 +290,7 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
     discoveryFailureReason
   };
   await chrome.storage.local.set({ lastSyncResult: result });
+  await captureRunDiagnostic('run_completed', { ...result, extensionVersion: EXTENSION_VERSION });
   await log('info', 'run:done', result);
   setBadge(result.totalFailed || !reported ? '!' : 'âœ“', result.totalFailed || !reported ? '#dc2626' : '#059669');
   return result;
@@ -381,6 +388,15 @@ async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
   return withBackgroundTab(url, async tabId => {
     const readiness = await waitForLinkedInPosts(tabId);
     if (!readiness.ready) {
+      await captureDiagnostic(tabId, crypto.randomUUID(), 'discovery_failed', {
+        sourceId: source.id,
+        sourceType: source.sourceType,
+        sourceName: source.name || source.vanity || '',
+        recoveryAttempt,
+        reason: readiness.reason || 'linkedin_layout_unrecognized',
+        layoutFingerprint: readiness.layoutFingerprint || 'unknown',
+        detectors: readiness.detectors || []
+      });
       return {
         companyName: '',
         posts: [],
@@ -406,6 +422,15 @@ async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
     const results = await chrome.scripting.executeScript({ target: { tabId }, func: extractCompanyPageFromDOM });
     const extracted = results?.[0]?.result || { companyName: '', posts: [], detectors: [] };
     if (!extracted.posts?.length && readiness.ready) {
+      await captureDiagnostic(tabId, crypto.randomUUID(), 'discovery_failed', {
+        sourceId: source.id,
+        sourceType: source.sourceType,
+        sourceName: source.name || source.vanity || '',
+        recoveryAttempt,
+        reason: 'linkedin_layout_unrecognized',
+        layoutFingerprint: readiness.layoutFingerprint || extracted.layoutFingerprint || 'unknown',
+        detectors: extracted.detectors || readiness.detectors || []
+      });
       return {
         ...extracted,
         notReady: true,
@@ -908,6 +933,24 @@ async function captureDiagnostic(tabId, traceId, stage, metadata = {}) {
     });
   } catch (error) {
     await log('warn', 'diagnostic:capture-failed', { traceId, stage, error: String(error) });
+  }
+}
+
+async function captureRunDiagnostic(stage, metadata = {}) {
+  const payload = {
+    traceId: activeRunId || crypto.randomUUID(),
+    stage,
+    ts: new Date().toISOString(),
+    metadata,
+    state: null
+  };
+  try {
+    await log('info', 'diagnostic:stage', payload);
+    await authenticatedFetch('/api/extension/diagnostics', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    await log('warn', 'diagnostic:capture-failed', { traceId: payload.traceId, stage, error: String(error) });
   }
 }
 
