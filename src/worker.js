@@ -2,10 +2,12 @@ import { collectDaySummary, rateLabel } from './reporting.js';
 import app from './index.js';
 import { sendAdminDailyReport } from './admin-report.js';
 import { sendSundayReports } from './weekly-report.js';
+import { sendExtensionReleaseNotice } from './extension-release-notice.js';
 import { ADMIN_PROGRESS_PATH, handleAdminProgress } from './admin-progress.js';
 
 const APP_ORIGIN = 'https://nexashare.com';
 const DAILY_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
+export const DAILY_REPORT_CRON = '0 6 * * *';
 export const CURRENT_EXTENSION_VERSION = '1.2.28';
 
 function escapeHtml(value) {
@@ -242,10 +244,18 @@ export default {
   },
   async scheduled(event, env, ctx) {
     const scheduledDate = event?.scheduledTime ? new Date(event.scheduledTime) : new Date();
-    ctx.waitUntil(Promise.all([
-      sendDailyUserReports(env),
-      sendAdminDailyReport(env),
-      sendSundayReports(env, CURRENT_EXTENSION_VERSION, { date: scheduledDate })
-    ]));
+    // Every cron fire checks for a new extension release (once per version, emailed to
+    // report@gershonconsulting.com). Only the daily 06:00 UTC fire sends the reports.
+    const jobs = [sendExtensionReleaseNotice(env, CURRENT_EXTENSION_VERSION).catch(error => {
+      console.error('Extension release notice crashed', { message: error?.message });
+    })];
+    if (!event?.cron || event.cron === DAILY_REPORT_CRON) {
+      jobs.push(
+        sendDailyUserReports(env),
+        sendAdminDailyReport(env),
+        sendSundayReports(env, CURRENT_EXTENSION_VERSION, { date: scheduledDate })
+      );
+    }
+    ctx.waitUntil(Promise.all(jobs));
   }
 };
