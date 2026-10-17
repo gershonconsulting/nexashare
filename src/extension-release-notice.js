@@ -157,3 +157,140 @@ export async function sendExtensionReleaseNotice(env, version, options = {}) {
   if (status !== 'sent') console.error('Extension release notice failed', { version, error });
   return { sent: status === 'sent' ? 1 : 0, status, version, providerMessageId, error, outdated, to: recipients };
 }
+
+// ---------------------------------------------------------------------------
+// Other Gershon platforms' Chrome extensions.
+//
+// Each platform publishes its latest extension version on a public URL. The watcher
+// remembers the last version it saw per platform; the first sighting is only a
+// baseline (no email), every later increase emails report@ once.
+// ---------------------------------------------------------------------------
+
+export const WATCHED_EXTENSIONS = [
+  {
+    app: 'social',
+    name: 'Social (GershonAI)',
+    url: 'https://social.gershon.ai/api/extension/version',
+    parse: body => {
+      const data = JSON.parse(body)?.data || {};
+      const download = data.downloadUrl ? new URL(data.downloadUrl, 'https://social.gershon.ai').href : '';
+      return { version: data.latest, download, notes: data.releaseNotes ? [String(data.releaseNotes).slice(0, 600)] : [] };
+    },
+    setup: 'https://social.gershon.ai/'
+  },
+  {
+    app: 'radar',
+    name: 'Radar (Sales Nav Collector)',
+    url: 'https://radar.gershoncrm.com/',
+    parse: body => {
+      const version = (body.match(/LATEST_EXT_VERSION\s*=\s*'(\d+(?:\.\d+)+)'/) || [])[1];
+      return { version, download: version ? `https://radar.gershoncrm.com/radar-extension-v${version}.zip` : '', notes: [] };
+    },
+    setup: 'https://radar.gershoncrm.com/'
+  },
+  {
+    app: 'pulse',
+    name: 'Pulse (LinkedIn Collector)',
+    url: 'https://pulse.gershoncrm.com/api/extension-version',
+    parse: body => {
+      const data = JSON.parse(body) || {};
+      return { version: data.latest, download: data.downloadUrl || '', notes: [] };
+    },
+    setup: 'https://pulse.gershoncrm.com/'
+  }
+];
+
+export const WATCH_FROM = 'GC Extensions <nexashare@gershon.ai>';
+
+export function buildWatchedReleaseEmail(extension, release, previousVersion, to = [ADMIN_REPORT_TO]) {
+  const notes = release.notes || [];
+  const text = [
+    `A new ${extension.name} Chrome extension is available: version ${release.version} (was ${previousVersion}).`,
+    'It needs to be downloaded and installed on ALL client computers running it.',
+    '',
+    ...(notes.length ? ['What changed:', ...notes.map(note => `- ${note}`), ''] : []),
+    ...(release.download ? [`Download: ${release.download}`] : []),
+    `Platform: ${extension.setup}`,
+    '',
+    'Sent automatically by the Gershon extension release watcher (NexaShare Worker).'
+  ].join('\n');
+  const notesHtml = notes.length
+    ? `<h3 style="margin:22px 0 8px;font-size:16px">What changed</h3><ul style="margin:0;padding-left:20px;font-size:14px;line-height:1.55">${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`
+    : '';
+  const button = release.download
+    ? `<p style="text-align:center;margin:0 0 6px"><a href="${escapeHtml(release.download)}" style="display:inline-block;background:#b91c1c;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:9px">Download ${escapeHtml(extension.name)} ${escapeHtml(release.version)}</a></p>`
+    : '';
+  return {
+    to,
+    from: WATCH_FROM,
+    subject: `New Chrome extension available — ${extension.name} ${release.version} — update all clients`,
+    text,
+    html: `<!doctype html><html><body style="margin:0;background:#eef3f8;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#0f2740"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:30px 14px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:#b91c1c;padding:26px;color:#fff"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.9">New Chrome extension release</div><div style="font-size:26px;font-weight:800;margin-top:6px">${escapeHtml(extension.name)} ${escapeHtml(release.version)} is available</div><div style="margin-top:10px;font-size:15px">Was ${escapeHtml(previousVersion)}. It needs to be downloaded and installed on all client computers.</div></td></tr><tr><td style="padding:26px">${button}<p style="text-align:center;margin:8px 0 0;font-size:13px"><a href="${escapeHtml(extension.setup)}" style="color:#0a66c2">Open the platform</a></p>${notesHtml}<p style="font-size:12px;color:#8194a6;text-align:center;margin:26px 0 0">Sent automatically by the Gershon extension release watcher.</p></td></tr></table></td></tr></table></body></html>`
+  };
+}
+
+async function ensureWatchTable(db) {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS extension_release_watch (
+       app TEXT PRIMARY KEY,
+       last_version TEXT NOT NULL,
+       status TEXT NOT NULL,
+       provider_message_id TEXT,
+       error TEXT,
+       updated_at TEXT
+     )`
+  ).run();
+}
+
+export async function checkWatchedExtensions(env, extensions = WATCHED_EXTENSIONS) {
+  const results = [];
+  // No email key means nothing can be announced; skip (also keeps tests off the network).
+  if (!env?.DB || !env?.RESEND_API_KEY) return results;
+  await ensureWatchTable(env.DB);
+  const recipients = reportRecipients(env);
+  for (const extension of extensions) {
+    try {
+      const response = await fetch(extension.url, { headers: { 'Cache-Control': 'no-cache' } });
+      if (!response.ok) { results.push({ app: extension.app, skipped: `http_${response.status}` }); continue; }
+      const release = extension.parse(await response.text());
+      if (!release?.version || !/^\d+(\.\d+)+$/.test(String(release.version))) {
+        results.push({ app: extension.app, skipped: 'no_version' });
+        continue;
+      }
+      const prior = await env.DB.prepare('SELECT last_version, status FROM extension_release_watch WHERE app = ?').bind(extension.app).first();
+      const save = (status, providerMessageId = null, error = null) => env.DB.prepare(
+        `INSERT INTO extension_release_watch (app, last_version, status, provider_message_id, error, updated_at)
+         VALUES (?, ?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(app) DO UPDATE SET last_version = excluded.last_version, status = excluded.status,
+           provider_message_id = excluded.provider_message_id, error = excluded.error, updated_at = excluded.updated_at`
+      ).bind(extension.app, release.version, status, providerMessageId, error).run();
+
+      if (!prior) {
+        await save('baseline');
+        results.push({ app: extension.app, baseline: release.version });
+        continue;
+      }
+      if (compareVersions(release.version, prior.last_version) <= 0) {
+        results.push({ app: extension.app, unchanged: prior.last_version });
+        continue;
+      }
+      const message = buildWatchedReleaseEmail(extension, release, prior.last_version, recipients);
+      const sendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: message.from, to: recipients, subject: message.subject, text: message.text, html: message.html })
+      });
+      const payload = await sendResponse.json().catch(() => ({}));
+      if (!sendResponse.ok || !payload.id) {
+        // Leave last_version unchanged so the next fire retries this release.
+        results.push({ app: extension.app, status: 'failed', error: String(payload.message || `HTTP ${sendResponse.status}`).slice(0, 300) });
+        continue;
+      }
+      await save('sent', payload.id);
+      results.push({ app: extension.app, sent: release.version, previous: prior.last_version, providerMessageId: payload.id });
+    } catch (error) {
+      results.push({ app: extension.app, skipped: 'error', error: String(error?.message || error).slice(0, 300) });
+    }
+  }
+  return results;
+}

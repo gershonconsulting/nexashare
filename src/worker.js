@@ -2,7 +2,7 @@ import { collectDaySummary, rateLabel } from './reporting.js';
 import app from './index.js';
 import { sendAdminDailyReport } from './admin-report.js';
 import { sendSundayReports } from './weekly-report.js';
-import { sendExtensionReleaseNotice } from './extension-release-notice.js';
+import { checkWatchedExtensions, sendExtensionReleaseNotice } from './extension-release-notice.js';
 import { ADMIN_PROGRESS_PATH, handleAdminProgress } from './admin-progress.js';
 
 const APP_ORIGIN = 'https://nexashare.com';
@@ -256,6 +256,10 @@ export default {
         sendSundayReports(env, CURRENT_EXTENSION_VERSION, { date: scheduledDate })
       );
     }
-    ctx.waitUntil(Promise.all(jobs));
+    // Same check for the other Gershon platforms' extensions (Social, Radar, Pulse).
+    const watcher = checkWatchedExtensions(env).catch(error => {
+      console.error('Extension release watcher crashed', { message: error?.message });
+    });
+    ctx.waitUntil(Promise.all([Promise.all(jobs), watcher]).then(([results]) => results));
   }
 };

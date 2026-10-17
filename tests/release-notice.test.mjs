@@ -6,7 +6,9 @@ import {
   RELEASE_NOTICE_FROM,
   buildReleaseNoticeEmail,
   compareVersions,
-  sendExtensionReleaseNotice
+  sendExtensionReleaseNotice,
+  checkWatchedExtensions,
+  WATCHED_EXTENSIONS
 } from '../src/extension-release-notice.js';
 import { CURRENT_EXTENSION_VERSION, DAILY_REPORT_CRON } from '../src/worker.js';
 
@@ -93,5 +95,59 @@ assert.equal(DAILY_REPORT_CRON, '0 6 * * *');
 const worker = await readFile(new URL('../src/worker.js', import.meta.url), 'utf8');
 assert.match(worker, /sendExtensionReleaseNotice\(env, CURRENT_EXTENSION_VERSION\)/);
 assert.ok(CURRENT_EXTENSION_VERSION);
+
+
+// ---- Other platforms' extensions (Social, Radar, Pulse) ----
+const social = WATCHED_EXTENSIONS.find(item => item.app === 'social');
+assert.equal(social.parse(JSON.stringify({ success: true, data: { latest: '0.20.0', downloadUrl: '/social-extension-v0.20.0.zip', releaseNotes: 'x' } })).download,
+  'https://social.gershon.ai/social-extension-v0.20.0.zip');
+const radar = WATCHED_EXTENSIONS.find(item => item.app === 'radar');
+assert.equal(radar.parse("<script>const LATEST_EXT_VERSION = '1.15.0';</script>").version, '1.15.0');
+const pulse = WATCHED_EXTENSIONS.find(item => item.app === 'pulse');
+assert.equal(pulse.parse(JSON.stringify({ latest: '1.19.0', downloadUrl: 'https://pulse.gershoncrm.com/pulse-extension.zip' })).version, '1.19.0');
+
+function watchDb(rows) {
+  return {
+    prepare(sql) {
+      let args = [];
+      const statement = {
+        bind: (...values) => { args = values; return statement; },
+        run: async () => { if (/INSERT INTO extension_release_watch/.test(sql)) rows.set(args[0], { last_version: args[1], status: args[2] }); return {}; },
+        first: async () => rows.get(args[0]) || null
+      };
+      return statement;
+    }
+  };
+}
+const watched = [{ app: 'radar', name: 'Radar', url: 'https://radar.example/', setup: 'https://radar.example/', parse: radar.parse }];
+let radarVersion = '1.15.0';
+let mails = [];
+let resendOk = true;
+globalThis.fetch = async (url, init) => {
+  if (url === 'https://api.resend.com/emails') {
+    mails.push(JSON.parse(init.body));
+    return resendOk ? { ok: true, status: 200, json: async () => ({ id: 'm' + mails.length }) } : { ok: false, status: 500, json: async () => ({ message: 'down' }) };
+  }
+  return { ok: true, status: 200, text: async () => `const LATEST_EXT_VERSION = '${radarVersion}';` };
+};
+const rows = new Map();
+const watchEnv = { RESEND_API_KEY: 'k', DB: watchDb(rows) };
+assert.deepEqual(await checkWatchedExtensions(watchEnv, watched), [{ app: 'radar', baseline: '1.15.0' }]);
+assert.equal(mails.length, 0, 'first sighting is a baseline, not a release');
+assert.deepEqual(await checkWatchedExtensions(watchEnv, watched), [{ app: 'radar', unchanged: '1.15.0' }]);
+radarVersion = '1.16.0';
+resendOk = false;
+assert.equal((await checkWatchedExtensions(watchEnv, watched))[0].status, 'failed');
+assert.equal(rows.get('radar').last_version, '1.15.0', 'failed send leaves the old version so it retries');
+resendOk = true;
+const announced = await checkWatchedExtensions(watchEnv, watched);
+assert.equal(announced[0].sent, '1.16.0');
+assert.match(mails.at(-1).subject, /New Chrome extension available — Radar 1\.16\.0 — update all clients/);
+assert.match(mails.at(-1).from, /^GC /);
+assert.deepEqual(mails.at(-1).to, ['report@gershonconsulting.com']);
+const sentCount = mails.length;
+await checkWatchedExtensions(watchEnv, watched);
+assert.equal(mails.length, sentCount, 'announced once per version');
+assert.deepEqual(await checkWatchedExtensions({ DB: watchDb(new Map()) }, watched), [], 'no key: no network, nothing to do');
 
 console.log('release-notice tests passed');
