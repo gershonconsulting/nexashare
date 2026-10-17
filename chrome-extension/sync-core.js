@@ -13,6 +13,7 @@ const COMMAND_ALARM = 'serverCommands';
 const RETRY_DELAYS_MINUTES = [5, 20, 60];
 const SOURCE_DISCOVERY_ATTEMPTS = 3;
 const REPOST_ATTEMPTS = 4;
+const MAX_POST_AGE_DAYS = 30;
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 let activeSyncPromise = null;
 
@@ -219,6 +220,8 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
       let candidateHandled = false;
       for (const post of posts) {
         if (!post.url || seen.has(post.id)) continue;
+        const postedMs = activityTimeMs(post.id);
+        if (postedMs && Date.now() - postedMs > MAX_POST_AGE_DAYS * 86400000) continue;
         if (post.alreadyReposted) {
           outcomes.push(makeOutcome(company, post, 'already_reposted', 'LinkedIn already showed this post as reposted.'));
           rememberPost(seen, post.id);
@@ -335,7 +338,7 @@ function discoveryFailureDetail(reason) {
     linkedin_admin_redirect: 'LinkedIn redirected the company feed to its admin dashboard. NexaShare will retry using member view.',
     linkedin_empty_feed: 'LinkedIn loaded the source page but did not expose any posts.',
     linkedin_tab_closed: 'The LinkedIn tab closed before NexaShare finished. NexaShare scheduled a controlled retry.',
-    linkedin_layout_unrecognized: 'LinkedIn loaded, but its post-card layout was not recognized. NexaShare stopped the batch to avoid repeated failures and scheduled a controlled retry.'
+    linkedin_layout_unrecognized: 'LinkedIn loaded, but its post-card layout was not recognized. NexaShare skipped this source, continued with the others, and scheduled a controlled retry.'
   };
   return details[reason] || details.linkedin_layout_unrecognized;
 }
@@ -386,6 +389,32 @@ async function scrapeCompanyPosts(source) {
 async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
   const url = sourceUrl(source);
   return withBackgroundTab(url, async tabId => {
+    // Data-first discovery (1.2.28): read LinkedIn's own company-feed data instead of
+    // waiting for the page to paint. An unfocused/occluded collection window often never
+    // renders post cards, which is what produced the linkedin_layout_unrecognized failures.
+    if (source.sourceType !== 'person' && source.vanity) {
+      try {
+        const dataResults = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: discoverCompanyPostsViaData,
+          args: [String(source.vanity)]
+        });
+        const viaData = dataResults?.[0]?.result;
+        if (viaData?.ok && viaData.posts?.length) {
+          await log('info', 'company:discovered-via-data', {
+            company: source.name || source.vanity,
+            posts: viaData.posts.length,
+            newest: viaData.posts[0]?.postedAt || ''
+          });
+          return { companyName: '', posts: viaData.posts, detectors: viaData.detectors || ['data-graphql'], discoveryRoute: 'data' };
+        }
+        await log('warn', 'company:data-discovery-fallback', { company: source.name || source.vanity, reason: viaData?.reason || 'no_result' });
+      } catch (error) {
+        if (/No tab with id/i.test(String(error))) return { companyName: '', posts: [], notReady: true, reason: 'linkedin_tab_closed' };
+        await log('warn', 'company:data-discovery-fallback', { company: source.name || source.vanity, reason: String(error).slice(0, 200) });
+      }
+    }
+
     const readiness = await waitForLinkedInPosts(tabId);
     if (!readiness.ready) {
       await captureDiagnostic(tabId, crypto.randomUUID(), 'discovery_failed', {
@@ -421,6 +450,7 @@ async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
 
     const results = await chrome.scripting.executeScript({ target: { tabId }, func: extractCompanyPageFromDOM });
     const extracted = results?.[0]?.result || { companyName: '', posts: [], detectors: [] };
+    extracted.posts = sortPostsNewestFirst(extracted.posts || []);
     if (!extracted.posts?.length && readiness.ready) {
       await captureDiagnostic(tabId, crypto.randomUUID(), 'discovery_failed', {
         sourceId: source.id,
@@ -540,6 +570,69 @@ function inspectLinkedInPage(finalAttempt = false) {
     return { ready: false, reason: 'linkedin_empty_feed', layoutFingerprint, detectors };
   }
   return { ready: false, reason: 'linkedin_layout_unrecognized', layoutFingerprint, detectors };
+}
+
+// LinkedIn activity ids are snowflakes: the top bits are the publish time in ms.
+// Sorting by id gives true newest-first order (the company feed itself is not chronological).
+function activityTimeMs(id) {
+  try { return /^\d{15,}$/.test(String(id)) ? Number(BigInt(id) >> 22n) : 0; } catch (error) { return 0; }
+}
+
+function sortPostsNewestFirst(posts) {
+  if (!posts.length || !posts.every(post => activityTimeMs(post.id) > 0)) return posts;
+  return [...posts].sort((a, b) => activityTimeMs(b.id) - activityTimeMs(a.id));
+}
+
+// Injected into a linkedin.com tab. Needs no rendering: fetches the company Posts page HTML
+// for the rotating GraphQL queryId and the page id, then asks LinkedIn's own company-feed
+// endpoint for the latest posts. Must stay self-contained (executeScript serialises it).
+async function discoverCompanyPostsViaData(vanity) {
+  const result = { ok: false, reason: '', posts: [], detectors: ['data-graphql'] };
+  const escapeRe = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  try {
+    const csrf = (document.cookie.match(/JSESSIONID="?([^";]+)/) || [])[1];
+    if (!csrf) { result.reason = 'no_csrf'; return result; }
+    const pageRes = await fetch('/company/' + encodeURIComponent(vanity) + '/posts/?feedView=all&viewAsMember=true', { credentials: 'include' });
+    if (!pageRes.ok) { result.reason = 'page_http_' + pageRes.status; return result; }
+    if (/\/(login|uas\/login|checkpoint|authwall)/.test(new URL(pageRes.url).pathname)) { result.reason = 'signed_out'; return result; }
+    const html = (await pageRes.text()).replace(/&quot;/g, '"').replace(/&#61;/g, '=');
+    const queryId = (html.match(/voyagerFeedDashOrganizationalPageUpdates\.[0-9a-f]{20,}/) || [])[0];
+    if (!queryId) { result.reason = 'no_query_id'; return result; }
+    const anchor = html.search(new RegExp('"universalName":"' + escapeRe(vanity) + '"', 'i'));
+    let pageId = '';
+    if (anchor !== -1) {
+      let best = Infinity;
+      const re = /urn:li:fsd_company:(\d+)/g;
+      let match;
+      while ((match = re.exec(html))) {
+        const distance = Math.abs(match.index - anchor);
+        if (distance < best && distance < 4000) { best = distance; pageId = match[1]; }
+      }
+    }
+    if (!pageId) { result.reason = 'no_page_id'; return result; }
+    const variables = '(count:10,start:0,moduleKey:ORGANIZATION_MEMBER_FEED_DESKTOP,organizationalPageUrn:urn%3Ali%3Afsd_organizationalPage%3A' + pageId + ')';
+    const apiRes = await fetch('/voyager/api/graphql?variables=' + variables + '&queryId=' + queryId, {
+      credentials: 'include',
+      headers: { 'csrf-token': csrf, 'x-restli-protocol-version': '2.0.0', accept: 'application/vnd.linkedin.normalized+json+2.1' }
+    });
+    if (!apiRes.ok) { result.reason = 'api_http_' + apiRes.status; return result; }
+    const body = await apiRes.text();
+    const ids = [...new Set(body.match(/urn:li:activity:\d{15,}/g) || [])].map(urn => urn.split(':').pop());
+    ids.sort((a, b) => (BigInt(b) > BigInt(a) ? 1 : BigInt(b) < BigInt(a) ? -1 : 0));
+    result.posts = ids.map(id => ({
+      id,
+      url: 'https://www.linkedin.com/feed/update/urn:li:activity:' + id + '/',
+      postedAt: new Date(Number(BigInt(id) >> 22n)).toISOString(),
+      text: '',
+      alreadyReposted: false
+    }));
+    result.ok = result.posts.length > 0;
+    if (!result.ok) result.reason = 'api_no_posts';
+    return result;
+  } catch (error) {
+    result.reason = 'error:' + String(error).slice(0, 200);
+    return result;
+  }
 }
 
 function extractCompanyPageFromDOM() {

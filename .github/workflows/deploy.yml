@@ -52,6 +52,9 @@ jobs:
       - name: Run delivery engine checks
         run: node tests/delivery-engine.test.mjs
 
+      - name: Run company discovery checks
+        run: node tests/company-discovery.test.mjs
+
       - name: Validate JavaScript and Chrome manifest
         run: |
           node --check src/access-policy.js
