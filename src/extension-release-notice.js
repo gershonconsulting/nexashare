@@ -197,6 +197,14 @@ export const WATCHED_EXTENSIONS = [
       return { version: data.latest, download: data.downloadUrl || '', notes: [] };
     },
     setup: 'https://pulse.gershoncrm.com/'
+  },
+  {
+    app: 'linalysis',
+    name: 'Linalysis (LinkedIn Analytics)',
+    // The Linalysis repo is public; its committed manifest is the shipped version.
+    url: 'https://raw.githubusercontent.com/gershonconsulting/linalysis/main/linalysis-extension/manifest.json',
+    parse: body => ({ version: JSON.parse(body)?.version, download: 'https://linalysis.net/linalysis-extension.zip', notes: [] }),
+    setup: 'https://linalysis.net/account.html'
   }
 ];
 

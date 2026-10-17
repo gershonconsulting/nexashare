@@ -106,6 +106,10 @@ assert.equal(radar.parse("<script>const LATEST_EXT_VERSION = '1.15.0';</script>"
 const pulse = WATCHED_EXTENSIONS.find(item => item.app === 'pulse');
 assert.equal(pulse.parse(JSON.stringify({ latest: '1.19.0', downloadUrl: 'https://pulse.gershoncrm.com/pulse-extension.zip' })).version, '1.19.0');
 
+const linalysis = WATCHED_EXTENSIONS.find(item => item.app === 'linalysis');
+assert.equal(linalysis.parse(JSON.stringify({ manifest_version: 3, version: '0.3.4' })).version, '0.3.4');
+assert.match(linalysis.url, /raw\.githubusercontent\.com\/gershonconsulting\/linalysis\/main\/linalysis-extension\/manifest\.json/);
+
 function watchDb(rows) {
   return {
     prepare(sql) {

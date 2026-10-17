@@ -256,7 +256,7 @@ export default {
         sendSundayReports(env, CURRENT_EXTENSION_VERSION, { date: scheduledDate })
       );
     }
-    // Same check for the other Gershon platforms' extensions (Social, Radar, Pulse).
+    // Same check for the other Gershon platforms' extensions (Social, Radar, Pulse, Linalysis).
     const watcher = checkWatchedExtensions(env).catch(error => {
       console.error('Extension release watcher crashed', { message: error?.message });
     });
