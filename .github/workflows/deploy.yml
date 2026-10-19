@@ -45,6 +45,7 @@ jobs:
           node tests/daily-report.test.mjs
           node tests/growth.test.mjs
           node tests/content-guards.mjs
+          node tests/daily-report-switch.test.mjs
 
       - name: Run proof-of-concept target checks
         run: node tests/access-policy.test.mjs

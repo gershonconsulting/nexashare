@@ -71,6 +71,7 @@ export function buildProgress({ users = [], daily = [], totals = [], extensions 
       id: Number(u.id),
       name: u.name || '',
       email: u.email || '',
+      daily_report_enabled: u.daily_report_enabled === undefined || u.daily_report_enabled === null ? true : Number(u.daily_report_enabled) === 1,
       team: u.team_name || '',
       team_id: u.team_id == null ? null : Number(u.team_id),
       joined_at: u.created_at || null,
@@ -162,7 +163,7 @@ export async function loadProgress(env, days, today = new Date()) {
   const since = `-${days - 1} days`;
   const db = env.DB;
   const [users, daily, totals, extensions, companies] = await Promise.all([
-    all(db, `SELECT u.id, u.name, u.email, u.team_id, u.created_at, t.name AS team_name
+    all(db, `SELECT u.id, u.name, u.email, u.team_id, u.created_at, u.daily_report_enabled, t.name AS team_name
              FROM users u LEFT JOIN teams t ON t.id = u.team_id`),
     all(db, `SELECT user_id, date(COALESCE(attempted_at, created_at)) AS day, status, COUNT(*) AS n
              FROM reposts
@@ -212,4 +213,27 @@ export async function handleAdminProgress(request, env, currentExtensionVersion 
   if (!isPlatformAdmin(user, env)) return json({ error: 'Forbidden' }, 403);
   const days = clampDays(new URL(request.url).searchParams.get('days'));
   return json({ ...(await loadProgress(env, days)), current_extension_version: currentExtensionVersion });
+}
+
+// ------------------------------------------- daily email ON/OFF per user (admin)
+// POST {"user_id": 7, "enabled": false} — platform admins only.
+export const ADMIN_DAILY_REPORT_SWITCH_PATH = '/api/admin/daily-report-switch';
+
+export async function handleAdminDailyReportSwitch(request, env) {
+  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  if (request.headers.get('Origin') !== 'https://nexashare.com') return json({ error: 'Invalid request origin' }, 403);
+  const session = sessionCookie(request);
+  if (!session) return json({ error: 'Not authenticated' }, 401);
+  const admin = await env.DB.prepare(
+    `SELECT u.id, u.email FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > datetime('now')`
+  ).bind(await sha256Hex(session)).first();
+  if (!admin) return json({ error: 'Not authenticated' }, 401);
+  if (!isPlatformAdmin(admin, env)) return json({ error: 'Forbidden' }, 403);
+  const body = await request.json().catch(() => ({}));
+  const userId = Number.parseInt(body?.user_id, 10);
+  if (!Number.isFinite(userId) || typeof body?.enabled !== 'boolean') return json({ error: 'user_id and enabled (true/false) are required' }, 400);
+  const res = await env.DB.prepare('UPDATE users SET daily_report_enabled = ? WHERE id = ?').bind(body.enabled ? 1 : 0, userId).run();
+  if (!res?.meta?.changes) return json({ error: 'User not found' }, 404);
+  return json({ user_id: userId, daily_report_enabled: body.enabled });
 }

@@ -3,7 +3,7 @@ import app from './index.js';
 import { sendAdminDailyReport } from './admin-report.js';
 import { sendSundayReports } from './weekly-report.js';
 import { checkWatchedExtensions, sendExtensionReleaseNotice } from './extension-release-notice.js';
-import { ADMIN_PROGRESS_PATH, handleAdminProgress } from './admin-progress.js';
+import { ADMIN_PROGRESS_PATH, handleAdminProgress, ADMIN_DAILY_REPORT_SWITCH_PATH, handleAdminDailyReportSwitch } from './admin-progress.js';
 
 const APP_ORIGIN = 'https://nexashare.com';
 const DAILY_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
@@ -129,8 +129,8 @@ export function buildDailyReport(user, rows, previousRows, signals = {}) {
     to: user.email,
     from: DAILY_REPORT_FROM,
     subject: `${subjectPrefix}NexaShare daily report · ${reportDate} UTC · ${rateLabel(today.confirmed, today.failed)} · ${today.confirmed} successful, ${today.failed} failed`,
-    text: `Status: ${status} | Reporting date: ${reportDate} (UTC)\nSuccess: ${rateLabel(today.confirmed, today.failed)}\n\nHi ${firstName},\n\n${textAlarm}${textOutdated}${summary}\n\n${textProgress}${textRows}\n\nReview your full repost history: ${dashboardUrl}`,
-    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:720px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:${ranYesterday ? '#0a66c2' : '#b42318'};color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare daily activity report</div><div style="margin-top:7px">${escapeHtml(summary)}</div><div style="margin-top:10px;font-weight:700">${escapeHtml(status)} · ${reportDate} UTC · ${escapeHtml(rateLabel(today.confirmed, today.failed))}</div></td></tr>${banners.join('')}${progressTable}<tr><td style="padding:0 26px 26px"><p style="font-size:16px">Hi ${escapeHtml(firstName)},</p><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:10px;background:#f8fafc">Source</th><th align="left" style="padding:10px;background:#f8fafc">Outcome / reason</th><th align="left" style="padding:10px;background:#f8fafc">Links</th></tr></thead><tbody>${itemHtml}</tbody></table><p style="text-align:center;margin:26px 0 4px"><a href="${dashboardUrl}" style="display:inline-block;background:#0a66c2;color:#fff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:9px">Review repost history</a></p><p style="font-size:12px;color:#667085">A repost is counted as successful only after LinkedIn confirmation. Failure reasons are shown when the extension reported one. Confirmation rate is measured against attempts, so skipped and already-reposted items are excluded from it.</p></td></tr></table></td></tr></table></body></html>`
+    text: `Status: ${status} | Reporting date: ${reportDate} (UTC)\nSuccess: ${rateLabel(today.confirmed, today.failed)}\n\nHi ${firstName},\n\n${textAlarm}${textOutdated}${summary}\n\n${textProgress}${textRows}\n\nReview your full repost history: ${dashboardUrl}\n\nTo stop this daily email, turn it off in Settings > Email reports: https://nexashare.com/dashboard.html#settings`,
+    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:720px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:${ranYesterday ? '#0a66c2' : '#b42318'};color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare daily activity report</div><div style="margin-top:7px">${escapeHtml(summary)}</div><div style="margin-top:10px;font-weight:700">${escapeHtml(status)} · ${reportDate} UTC · ${escapeHtml(rateLabel(today.confirmed, today.failed))}</div></td></tr>${banners.join('')}${progressTable}<tr><td style="padding:0 26px 26px"><p style="font-size:16px">Hi ${escapeHtml(firstName)},</p><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:10px;background:#f8fafc">Source</th><th align="left" style="padding:10px;background:#f8fafc">Outcome / reason</th><th align="left" style="padding:10px;background:#f8fafc">Links</th></tr></thead><tbody>${itemHtml}</tbody></table><p style="text-align:center;margin:26px 0 4px"><a href="${dashboardUrl}" style="display:inline-block;background:#0a66c2;color:#fff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:9px">Review repost history</a></p><p style="font-size:12px;color:#667085">Don't want this daily email? Turn it off any time in <a href="https://nexashare.com/dashboard.html#settings" style="color:#0a66c2">Settings &rarr; Email reports</a>.</p><p style="font-size:12px;color:#667085">A repost is counted as successful only after LinkedIn confirmation. Failure reasons are shown when the extension reported one. Confirmation rate is measured against attempts, so skipped and already-reposted items are excluded from it.</p></td></tr></table></td></tr></table></body></html>`
   };
 }
 
@@ -171,6 +171,7 @@ async function sendDailyUserReports(env) {
      FROM users u
      WHERE u.email IS NOT NULL
        AND trim(u.email) <> ''
+       AND COALESCE(u.daily_report_enabled, 1) = 1
        AND NOT EXISTS (
          SELECT 1 FROM daily_reports d
          WHERE d.user_id = u.id AND d.report_date = date('now')
@@ -239,7 +240,9 @@ async function sendDailyUserReports(env) {
 export default {
   fetch(request, env, ctx) {
     // Platform-admin view of every user's results (see src/admin-progress.js).
-    if (new URL(request.url).pathname === ADMIN_PROGRESS_PATH) return handleAdminProgress(request, env, CURRENT_EXTENSION_VERSION);
+    const path = new URL(request.url).pathname;
+    if (path === ADMIN_PROGRESS_PATH) return handleAdminProgress(request, env, CURRENT_EXTENSION_VERSION);
+    if (path === ADMIN_DAILY_REPORT_SWITCH_PATH) return handleAdminDailyReportSwitch(request, env);
     return app.fetch(request, env, ctx);
   },
   async scheduled(event, env, ctx) {

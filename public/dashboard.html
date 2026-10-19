@@ -94,6 +94,7 @@ body{background:var(--canvas);color:var(--navy)}.app{grid-template-columns:252px
 
   <section class="view" id="view-settings">
     <div class="panel"><div class="toolbar"><div><h2>Access and optional enrollment</h2><p class="muted" id="subscriptionText">Loading access information…</p></div><a class="button" id="upgradeLink" href="https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00" target="_blank" rel="noopener noreferrer">Optional paid enrollment</a></div><div class="notice" id="trialPolicy"></div><div class="notice warning">All application features are available free during proof-of-concept testing. Paid enrollment is optional and provides no additional access during this phase.</div></div>
+    <div class="panel"><h2>Email reports</h2><p class="muted">NexaShare emails you a daily activity report at 06:00 UTC. You can switch it off and back on at any time.</p><label style="display:flex;align-items:center;gap:10px;font-weight:600"><input type="checkbox" id="dailyReportToggle" disabled> Daily activity email <span id="dailyReportState" class="badge"></span></label><div id="dailyReportMessage" role="status" class="muted"></div></div>
     <div class="panel"><h2>Service readiness</h2><p id="serviceHealth" class="muted">Checking Worker and database…</p></div>
   </section>
 
@@ -202,6 +203,13 @@ document.getElementById('diagnosticToggle').addEventListener('click',e=>{const d
 function subscriptionLabel(s){return s.display_status==='proof_of_concept_free'?'Free proof-of-concept access · no trial expiry or subscription limits':'Access information unavailable'}
 async function load(){try{const [u,r,t,c,p,hashtags,sub,h,delivery]=await Promise.all([api('/api/user'),api('/api/reposts'),api('/api/team'),api('/api/companies'),api('/api/people'),api('/api/hashtags'),api('/api/subscription'),api('/api/health'),api('/api/campaign-health')]);model={user:u,reposts:r.reposts,team:t.members,companies:c.companies,people:p.people,hashtagData:hashtags,subscription:sub,deliveryHealth:delivery.health};document.getElementById('userName').textContent=u.name||u.email;document.getElementById('subscriptionText').textContent=subscriptionLabel(sub);document.getElementById('trialPolicy').textContent=sub.extension_policy;document.getElementById('upgradeLink').href=sub.checkout_url;document.getElementById('serviceHealth').textContent=h.status==='ready'?'Worker and database are ready.':'Service needs attention.';document.getElementById('serviceHealth').className=h.status==='ready'?'health-ready':'health-bad';renderDashboard();renderCompanies();renderPeople();renderHashtags();renderDeliveryHealth();renderReposts();detectExtension()}catch(x){document.getElementById('readinessBanner').className='notice danger';document.getElementById('readinessBanner').textContent=`Could not load the member area: ${x.message}`}}
 load();
-</script><script src="/growth-dashboard.js"></script>
+</script><script src="/growth-dashboard.js">
+// Daily email ON/OFF (Settings > Email reports)
+(function(){const box=document.getElementById('dailyReportToggle'),state=document.getElementById('dailyReportState'),msg=document.getElementById('dailyReportMessage');
+function show(on){box.checked=on;state.textContent=on?'ON':'OFF';state.className='badge '+(on?'confirmed':'failed')}
+fetch('/api/user',{credentials:'include'}).then(r=>r.ok?r.json():null).then(u=>{if(!u)return;show(u.daily_report_enabled!==false);box.disabled=false}).catch(()=>{});
+box.addEventListener('change',async()=>{const on=box.checked;box.disabled=true;msg.textContent='Saving…';try{const r=await fetch('/api/user/daily-report',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:on})});const d=await r.json();if(!r.ok)throw Error(d.error||'Could not save');show(d.daily_report_enabled);msg.textContent=d.daily_report_enabled?'Daily email is ON.':'Daily email is OFF. You will not receive it until you switch it back on.'}catch(e){show(!on);msg.textContent=e.message}finally{box.disabled=false}});
+if(location.hash==='#settings'){const b=document.querySelector('[data-view="settings"]');if(b)setTimeout(()=>b.click(),0)}})();
+</script>
 </body></html>
 
