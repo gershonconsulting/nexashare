@@ -83,7 +83,8 @@ export async function handleCommentAPI(request, env, user) {
 }
 export async function handlePublicApproval(request, env) {
   const url = new URL(request.url);
-  const rawToken = request.method === 'GET' ? url.searchParams.get('token') : (await request.json().catch(() => ({}))).token;
+  const body = request.method === 'GET' ? {} : await request.json().catch(() => ({}));
+  const rawToken = request.method === 'GET' ? url.searchParams.get('token') : body.token;
   if (!rawToken || !/^[a-f0-9]{64}$/.test(rawToken)) return json({ error: 'Invalid link' }, 400);
   const tokenHash = await hash(rawToken);
   const row = await env.DB.prepare("SELECT id,source_name,original_post_url,original_post_text,draft_text,final_text,status,edited,created_at FROM comment_approvals WHERE approval_token_hash=?").bind(tokenHash).first();
@@ -92,7 +93,6 @@ export async function handlePublicApproval(request, env) {
   if (request.method === 'GET') return json({ ...row, expired, token: undefined });
   if (request.headers.get('Origin') !== 'https://nexashare.com') return json({ error: 'Invalid origin' }, 403);
   if (expired || row.status !== 'emailed') return json({ error: 'Approval expired or already decided' }, 409);
-  const body = await request.clone().json().catch(() => ({}));
   if (!['yes','no','edit'].includes(body.action)) return json({ error: 'Choose YES, NO, or EDIT' }, 400);
   const final = body.action === 'edit' ? clean(body.comment, 1000) : row.draft_text;
   if (body.action === 'edit' && !final) return json({ error: 'Edited comment is empty' }, 422);
