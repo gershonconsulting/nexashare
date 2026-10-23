@@ -4,6 +4,23 @@ Written by: Claude (Anthropic) - token-limit handoff protocol
 Date: 2026-09-09
 ================================================================
 
+================================================================
+2026-10-23 nightly  -  phone header fix (PR nightly/2026-10-23-nexashare-phone-header)
+================================================================
+OK  Homepage header (public/index.html) on phones under 480px: the
+    "Features" and "How It Works" links are hidden there, the logo and
+    "Get Started" button are a bit smaller, so the header stays on one
+    line and "Get Started" is fully visible. At 390px the page was
+    450px wide (sideways scroll); now exactly 390px. Desktop unchanged.
+    Blue NexaShare brand kept.
+NO  Version NOT bumped on purpose. The only version number NexaShare
+    shows is the Chrome extension release (1.2.28). Bumping
+    CURRENT_EXTENSION_VERSION would make the cron email every client
+    a release notice and turn on the red "update required" banner,
+    for an extension that did not change. If a bump is wanted anyway,
+    1.2.29 is already earmarked for PR #22 (per PR #23), so it would
+    be 1.2.30.
+
 0. WHO YOU ARE READING THIS
 ----------------------------------------------------------------
 You are an AI assistant taking over work on this repository for
