@@ -542,7 +542,10 @@ function inspectLinkedInPage(finalAttempt = false) {
     '[data-urn*="activity"]',
     '[data-id*="urn:li:activity"]',
     '[data-entity-urn*="activity"]',
+    '[data-chameleon-result-urn*="activity"]',
     '[data-view-name="feed-full-update"]',
+    '[data-view-name*="feed-update"]',
+    '[data-testid*="feed-update"]',
     'article[data-urn]',
     'main article'
   ].join(','));
@@ -552,7 +555,7 @@ function inspectLinkedInPage(finalAttempt = false) {
   if (activityLinks.length) detectors.push('activity-link');
 
   const semanticControls = document.querySelectorAll(
-    '[data-view-name*="repost"], [data-view-name*="reshare"], button[aria-pressed], .social-actions-button, .social-reshare-button'
+    '[data-view-name*="repost"], [data-view-name*="reshare"], button[aria-pressed][aria-label*="repost" i], button[aria-pressed][aria-label*="reshare" i], .social-reshare-button'
   );
   if (semanticControls.length) detectors.push('semantic-control');
 
@@ -645,7 +648,10 @@ function extractCompanyPageFromDOM() {
     '[data-urn*="activity"]',
     '[data-id*="urn:li:activity"]',
     '[data-entity-urn*="activity"]',
+    '[data-chameleon-result-urn*="activity"]',
     '[data-view-name="feed-full-update"]',
+    '[data-view-name*="feed-update"]',
+    '[data-testid*="feed-update"]',
     'article[data-urn]',
     'main article'
   ];
@@ -671,7 +677,7 @@ function extractCompanyPageFromDOM() {
 
   const controlFor = item => {
     const semantic = item.querySelector(
-      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button[aria-pressed]'
+      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button[aria-pressed][aria-label*="repost" i], button[aria-pressed][aria-label*="reshare" i]'
     );
     if (semantic) {
       detectors.add('semantic-control');
@@ -718,7 +724,7 @@ function extractCompanyPageFromDOM() {
       return 't' + h.toString(36);
     };
     const semanticControls = [...document.querySelectorAll(
-      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button[aria-pressed], button, [role="button"]'
+      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button, [role="button"]'
     )].filter(node => {
       if (node.matches('[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button')) return true;
       const value = (node.getAttribute('aria-label') || '') + ' ' + (node.textContent || '');
