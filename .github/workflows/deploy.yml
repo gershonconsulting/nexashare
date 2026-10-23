@@ -45,12 +45,19 @@ jobs:
           node tests/daily-report.test.mjs
           node tests/growth.test.mjs
           node tests/content-guards.mjs
+          node tests/daily-report-switch.test.mjs
 
       - name: Run proof-of-concept target checks
         run: node tests/access-policy.test.mjs
 
       - name: Run delivery engine checks
         run: node tests/delivery-engine.test.mjs
+
+      - name: Run company discovery checks
+        run: node tests/company-discovery.test.mjs
+
+      - name: Run extension release notice checks
+        run: node tests/release-notice.test.mjs
 
       - name: Validate JavaScript and Chrome manifest
         run: |
@@ -60,6 +67,7 @@ jobs:
           node --check src/admin-report.js
           node --check src/weekly-report.js
           node --check src/reporting.js
+          node --check src/extension-release-notice.js
           node --check src/referrals.js
           node --check src/intelligence.js
           node --check public/growth-dashboard.js

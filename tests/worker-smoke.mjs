@@ -304,12 +304,18 @@ assert.equal(adminReportWrongKey.status, 401);
 // The cron entrypoint must run both daily emails, not just the per-user one.
 const cronWorker = (await import('../src/worker.js')).default;
 let cronPromise;
-cronWorker.scheduled({ scheduledTime: Date.parse('2026-09-14T06:00:00Z') }, env, { waitUntil(promise) { cronPromise = promise; } });
+cronWorker.scheduled({ cron: '0 6 * * *', scheduledTime: Date.parse('2026-09-14T06:00:00Z') }, env, { waitUntil(promise) { cronPromise = promise; } });
 assert.deepEqual(await cronPromise, [
+  { sent: 0, skipped: 'resend_not_configured', version: '1.2.28' },
   { sent: 0, skipped: 'resend_not_configured' },
   { sent: 0, skipped: 'resend_not_configured', to: ['report@gershonconsulting.com'] },
   { sent: 0, skipped: 'not_sunday' }
 ]);
+
+// The half-hourly fire only checks for a new extension release; it never sends reports.
+let releaseOnlyPromise;
+cronWorker.scheduled({ cron: '*/30 * * * *', scheduledTime: Date.parse('2026-09-14T06:30:00Z') }, env, { waitUntil(promise) { releaseOnlyPromise = promise; } });
+assert.deepEqual(await releaseOnlyPromise, [{ sent: 0, skipped: 'resend_not_configured', version: '1.2.28' }]);
 
 console.log('Worker and extension smoke checks passed.');
 

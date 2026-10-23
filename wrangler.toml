@@ -16,7 +16,8 @@ database_id = "a282afe3-af5f-44e3-9982-c49dd5bd641d"
 
 [triggers]
 # 06:00 UTC = 08:00 CEST / 07:00 CET. Cloudflare cron schedules use UTC.
-crons = ["0 6 * * *"]
+# "*/30" only checks for a new Chrome extension release and emails report@ once per version.
+crons = ["0 6 * * *", "*/30 * * * *"]
 
 [[routes]]
 pattern = "nexashare.com"

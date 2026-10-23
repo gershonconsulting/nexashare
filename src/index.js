@@ -472,7 +472,18 @@ async function handleAPI(request, env, ctx) {
   if (url.pathname === '/api/user') {
     const user = await getUser(request, env);
     if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
-    return jsonResponse({ id: user.id, name: user.name, email: user.email, role: user.role, team_name: user.team_name, team_id: user.team_id });
+    return jsonResponse({ id: user.id, name: user.name, email: user.email, role: user.role, team_name: user.team_name, team_id: user.team_id, daily_report_enabled: user.daily_report_enabled === undefined || user.daily_report_enabled === null ? true : Number(user.daily_report_enabled) === 1 });
+  }
+
+  // Each user can switch their own 06:00 UTC daily email ON or OFF.
+  if (url.pathname === '/api/user/daily-report' && request.method === 'POST') {
+    if (request.headers.get('Origin') !== APP_ORIGIN) return jsonResponse({ error: 'Invalid request origin' }, 403);
+    const user = await getUser(request, env);
+    if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
+    const body = await request.json().catch(() => ({}));
+    if (typeof body?.enabled !== 'boolean') return jsonResponse({ error: 'enabled (true/false) is required' }, 400);
+    await env.DB.prepare('UPDATE users SET daily_report_enabled = ? WHERE id = ?').bind(body.enabled ? 1 : 0, user.id).run();
+    return jsonResponse({ daily_report_enabled: body.enabled });
   }
 
   if (url.pathname === '/api/subscription' && request.method === 'GET') {

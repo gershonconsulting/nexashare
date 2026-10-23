@@ -123,7 +123,7 @@ function render() {
     <div id="pchart">${barChart(p.series, { cumulative: true })}</div></div>
   <div class="card"><h2>Progress by user</h2><p class="sub" style="margin-bottom:10px">Healthy = a confirmed repost in the last ${data.stall_after_days} days. Click a row for that user's daily chart.</p>
     <div class="filters"><input id="q" placeholder="Search name, email or team" value="${esc(query)}"></div>
-    <div class="scroll"><table><thead><tr><th>User</th><th>Status</th><th>${days}-day trend</th><th class="num">Confirmed ${days}d</th><th class="num">Last 7d</th><th class="num">Rate ${days}d</th><th class="num hide-sm">All-time</th><th class="hide-sm">Last confirmed</th><th class="hide-sm">Extension</th><th class="num hide-sm">Companies</th></tr></thead>
+    <div class="scroll"><table><thead><tr><th>User</th><th>Status</th><th>${days}-day trend</th><th class="num">Confirmed ${days}d</th><th class="num">Last 7d</th><th class="num">Rate ${days}d</th><th class="num hide-sm">All-time</th><th class="hide-sm">Last confirmed</th><th class="hide-sm">Extension</th><th class="num hide-sm">Companies</th><th>Daily email</th></tr></thead>
     <tbody>${users.map(u => `
       <tr class="u" data-id="${u.id}"><td class="who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}${u.team ? ' · ' + esc(u.team) : ''}</span></td>
       <td><span class="pill ${u.status}">${STATUS[u.status]}</span></td>
@@ -134,11 +134,23 @@ function render() {
       <td class="num hide-sm">${u.all_time.confirmed}</td>
       <td class="hide-sm">${fmtWhen(u.last_confirmed_at)}</td>
       <td class="hide-sm"><span class="ver ${u.extension_version && data.current_extension_version && u.extension_version !== data.current_extension_version ? 'old' : ''}">${esc(u.extension_version || '—')}</span><br><span style="font-size:12px;color:var(--muted)">seen ${fmtWhen(u.extension_last_seen_at)}</span></td>
-      <td class="num hide-sm">${u.companies}</td></tr>
-      ${open.has(u.id) ? `<tr class="detail"><td colspan="10"><div class="dchart" data-id="${u.id}">${barChart(u.series, { h: 160 })}</div><div class="sub" style="margin-top:6px">All-time: ${u.all_time.confirmed} confirmed · ${u.all_time.failed} failed · ${u.all_time.skipped} skipped · rate ${pct(u.all_time.rate)} · joined ${esc(u.joined_at || '—')}</div></td></tr>` : ''}`).join('') || '<tr><td colspan="10" class="msg">No users match.</td></tr>'}
+      <td class="num hide-sm">${u.companies}</td>
+      <td><button class="dr-switch" data-id="${u.id}" data-on="${u.daily_report_enabled ? 1 : 0}" title="Switch this user's daily email" style="cursor:pointer;border:0;border-radius:999px;padding:4px 12px;font-weight:700;color:#fff;background:${u.daily_report_enabled ? '#12b76a' : '#b42318'}">${u.daily_report_enabled ? 'ON' : 'OFF'}</button></td></tr>
+      ${open.has(u.id) ? `<tr class="detail"><td colspan="11"><div class="dchart" data-id="${u.id}">${barChart(u.series, { h: 160 })}</div><div class="sub" style="margin-top:6px">All-time: ${u.all_time.confirmed} confirmed · ${u.all_time.failed} failed · ${u.all_time.skipped} skipped · rate ${pct(u.all_time.rate)} · joined ${esc(u.joined_at || '—')}</div></td></tr>` : ''}`).join('') || '<tr><td colspan="11" class="msg">No users match.</td></tr>'}
     </tbody></table></div></div>`;
   bindTips($('#pchart'), p.series);
   document.querySelectorAll('.dchart').forEach(el => bindTips(el, data.users.find(u => u.id === +el.dataset.id).series));
+  document.querySelectorAll('.dr-switch').forEach(b => b.onclick = async e => {
+    e.stopPropagation();
+    const id = +b.dataset.id, on = b.dataset.on !== '1';
+    b.disabled = true; b.textContent = '…';
+    try {
+      const r = await fetch('/api/admin/daily-report-switch', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: id, enabled: on }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
+      data.users.find(u => u.id === id).daily_report_enabled = d.daily_report_enabled;
+    } catch (err) { console.error("Daily email switch failed", err); }
+    render();
+  });
   document.querySelectorAll('tr.u').forEach(tr => tr.onclick = () => { const id = +tr.dataset.id; open.has(id) ? open.delete(id) : open.add(id); render(); });
   const q = $('#q'); q.oninput = () => { query = q.value.trim().toLowerCase(); const pos = q.selectionStart; render(); const n = $('#q'); n.focus(); n.setSelectionRange(pos, pos); };
 }

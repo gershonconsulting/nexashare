@@ -18,3 +18,11 @@ Use this standard for every application we build that includes a private or publ
 ## Private-test default
 
 Until an extension is in the Chrome Web Store, preserve the local-folder route so a tester can reload the same unpacked folder without repeatedly downloading a ZIP.
+
+## Release notice to report@ (standing rule, set by Olivier 2026-10-17)
+
+Every new release of any Gershon Chrome extension must email **report@gershonconsulting.com** saying a new extension is available and must be downloaded on all client computers.
+
+- NexaShare does this itself: `src/extension-release-notice.js`, run by the Worker's half-hourly cron. Bumping `CURRENT_EXTENSION_VERSION` is enough; add a line to `RELEASE_NOTES` for the version so the email says what changed. It lists the clients still on an older version.
+- The same cron watches the other platforms through their public latest-version signal: Social (`/api/extension/version`), Radar (`LATEST_EXT_VERSION` on its home page), Pulse (`/api/extension-version`), Linalysis (the public repo's `linalysis-extension/manifest.json`). A platform only needs to keep that signal current when it releases.
+- A platform added later: give it a public latest-version URL and add it to `WATCHED_EXTENSIONS`.
