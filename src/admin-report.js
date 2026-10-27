@@ -278,6 +278,20 @@ export function buildAdminReportEmail(data, options = {}) {
     { label: 'Count', align: 'right', render: row => escapeHtml(row.count) }
   ]);
 
+  const diagnosticRows = (data.recent || []).filter(row => row.status === 'failed').map(row => ({
+    source: row.company_name || 'Unknown',
+    version: row.extension_version || 'unknown (old client)',
+    route: row.discovery_route || 'unknown',
+    reason: row.discovery_reason || row.detail || 'unclassified',
+    sourceType: row.source_type || 'unknown'
+  }));
+  const diagnosticsHtml = listTable('Failed repost diagnostics (latest attempts)', diagnosticRows, [
+    { label: 'Source', render: row => escapeHtml(row.source) },
+    { label: 'Version', render: row => escapeHtml(row.version) },
+    { label: 'Route', render: row => escapeHtml(row.route) },
+    { label: 'Reason', render: row => escapeHtml(row.reason) }
+  ]);
+
   const sourcesHtml = listTable('Most active sources', data.topSources, [
     { label: 'Source', render: row => escapeHtml(row.source) },
     { label: 'Confirmed', align: 'right', render: row => escapeHtml(row.confirmed) },
