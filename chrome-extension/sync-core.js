@@ -402,6 +402,7 @@ async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
     // Data-first discovery (1.2.28): read LinkedIn's own company-feed data instead of
     // waiting for the page to paint. An unfocused/occluded collection window often never
     // renders post cards, which is what produced the linkedin_layout_unrecognized failures.
+    let discoveryFallbackReason = '';
     if (source.sourceType !== 'person' && source.vanity) {
       try {
         const dataResults = await chrome.scripting.executeScript({
@@ -418,9 +419,11 @@ async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
           });
           return { companyName: '', posts: viaData.posts, detectors: viaData.detectors || ['data-graphql'], discoveryRoute: 'data', recoveryAttempt };
         }
-        await log('warn', 'company:data-discovery-fallback', { company: source.name || source.vanity, reason: viaData?.reason || 'no_result' });
+        discoveryFallbackReason = String(viaData?.reason || 'no_result').slice(0, 150);
+        await log('warn', 'company:data-discovery-fallback', { company: source.name || source.vanity, reason: discoveryFallbackReason });
       } catch (error) {
         if (/No tab with id/i.test(String(error))) return { companyName: '', posts: [], notReady: true, reason: 'linkedin_tab_closed' };
+        discoveryFallbackReason = 'exception';
         await log('warn', 'company:data-discovery-fallback', { company: source.name || source.vanity, reason: String(error).slice(0, 200) });
       }
     }
@@ -441,6 +444,7 @@ async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
         posts: [],
         notReady: true,
         discoveryRoute: 'none',
+        discoveryFallbackReason,
         recoveryAttempt,
         reason: readiness.reason,
         layoutFingerprint: readiness.layoutFingerprint || 'unknown',
@@ -474,13 +478,14 @@ async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
         detectors: extracted.detectors || readiness.detectors || []
       });
       return {
+        discoveryRoute: 'none', discoveryFallbackReason, recoveryAttempt,
         ...extracted,
         notReady: true,
         reason: 'linkedin_layout_unrecognized',
         layoutFingerprint: readiness.layoutFingerprint || extracted.layoutFingerprint || 'unknown'
       };
     }
-    return extracted;
+    return { ...extracted, discoveryRoute: 'dom', discoveryFallbackReason, recoveryAttempt };
   });
 }
 
