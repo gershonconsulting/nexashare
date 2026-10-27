@@ -193,6 +193,16 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
     try {
       const scraped = await scrapeCompanyPosts(company);
       const posts = scraped.posts;
+      const diagnostic = {
+        sourceType: company.sourceType || 'company',
+        sourceId: String(company.id || '').slice(0, 100),
+        sourceVanity: String(company.vanity || '').slice(0, 100),
+        discoveryRoute: scraped.discoveryRoute || 'none',
+        discoveryReason: scraped.discoveryFallbackReason || scraped.reason || '',
+        recoveryAttempt: scraped.recoveryAttempt || SOURCE_DISCOVERY_ATTEMPTS
+      };
+      const outcomeFor = (post, status, detail, repostUrl) => ({ ...makeOutcome(company, post, status, detail, repostUrl), diagnostic });
+      const sourceOutcomeFor = (status, detail) => ({ ...makeCompanyOutcome(company, status, detail), diagnostic });
       if (scraped.notReady) {
         discoveryFailures += 1;
         discoveryFailureReason = scraped.reason || 'linkedin_layout_unrecognized';
@@ -223,7 +233,7 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
         const postedMs = activityTimeMs(post.id);
         if (postedMs && Date.now() - postedMs > MAX_POST_AGE_DAYS * 86400000) continue;
         if (post.alreadyReposted) {
-          outcomes.push(makeOutcome(company, post, 'already_reposted', 'LinkedIn already showed this post as reposted.'));
+          outcomes.push(outcomeFor( post, 'already_reposted', 'LinkedIn already showed this post as reposted.'));
           rememberPost(seen, post.id);
           continue;
         }
@@ -238,16 +248,16 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
           await log('info', 'repost:attempt', { company: company.name || company.vanity, postUrl: post.url });
           const result = await repostContent(post);
           await log(result.confirmed ? 'info' : 'error', result.confirmed ? 'repost:confirmed' : 'repost:failed', { company: company.name || company.vanity, detail: result.detail, repostUrl: result.repostUrl || null });
-          outcomes.push(makeOutcome(company, post, result.confirmed ? 'confirmed' : 'failed', result.detail, result.repostUrl));
+          outcomes.push(outcomeFor( post, result.confirmed ? 'confirmed' : 'failed', result.detail, result.repostUrl));
           if (result.confirmed) rememberPost(seen, post.id);
         } catch (error) {
-          outcomes.push(makeOutcome(company, post, 'failed', String(error)));
+          outcomes.push(outcomeFor( post, 'failed', String(error)));
         }
         await sleep(REPOST_DELAY_MS + Math.random() * 2000);
         break;
       }
       if (!candidateHandled && !posts.some(post => post.alreadyReposted && !seen.has(post.id))) {
-        outcomes.push(makeCompanyOutcome(company, scraped.notReady ? 'failed' : 'skipped', posts.length ? 'No new eligible posts were found.' : (scraped.notReady ? discoveryFailureDetail(scraped.reason) : 'No posts were found on the company page.')));
+        outcomes.push(sourceOutcomeFor( scraped.notReady ? 'failed' : 'skipped', posts.length ? 'No new eligible posts were found.' : (scraped.notReady ? discoveryFailureDetail(scraped.reason) : 'No posts were found on the company page.')));
       }
       processedPostIds[sourceKey] = [...seen].slice(-500);
       // A single LinkedIn layout problem must never abort the remaining sources.
@@ -406,7 +416,7 @@ async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
             posts: viaData.posts.length,
             newest: viaData.posts[0]?.postedAt || ''
           });
-          return { companyName: '', posts: viaData.posts, detectors: viaData.detectors || ['data-graphql'], discoveryRoute: 'data' };
+          return { companyName: '', posts: viaData.posts, detectors: viaData.detectors || ['data-graphql'], discoveryRoute: 'data', recoveryAttempt };
         }
         await log('warn', 'company:data-discovery-fallback', { company: source.name || source.vanity, reason: viaData?.reason || 'no_result' });
       } catch (error) {
@@ -430,6 +440,8 @@ async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
         companyName: '',
         posts: [],
         notReady: true,
+        discoveryRoute: 'none',
+        recoveryAttempt,
         reason: readiness.reason,
         layoutFingerprint: readiness.layoutFingerprint || 'unknown',
         detectors: readiness.detectors || []
