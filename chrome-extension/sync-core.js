@@ -198,8 +198,8 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
         sourceId: String(company.id || '').slice(0, 100),
         sourceVanity: String(company.vanity || '').slice(0, 100),
         discoveryRoute: scraped.discoveryRoute || 'none',
-        discoveryReason: scraped.discoveryFallbackReason || scraped.reason || '',
-        recoveryAttempt: scraped.recoveryAttempt || SOURCE_DISCOVERY_ATTEMPTS
+        discoveryReason: scraped.reason || scraped.discoveryFallbackReason || '',
+        recoveryAttempt: scraped.recoveryAttempt || 1
       };
       const outcomeFor = (post, status, detail, repostUrl) => ({ ...makeOutcome(company, post, status, detail, repostUrl), diagnostic });
       const sourceOutcomeFor = (status, detail) => ({ ...makeCompanyOutcome(company, status, detail), diagnostic });
