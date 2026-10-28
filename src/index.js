@@ -726,6 +726,7 @@ async function handleAPI(request, env, ctx) {
     if (!user || !user.team_id) return jsonResponse({ error: 'Invalid extension token' }, 401);
     const body = await request.json();
     const outcomes = Array.isArray(body.outcomes) ? body.outcomes.slice(0, 100) : [];
+    const reportedVersion = typeof body.extensionVersion === 'string' ? body.extensionVersion.slice(0, 20) : null;
     let accepted = 0;
     for (const outcome of outcomes) {
       const allowed = ['confirmed', 'failed', 'already_reposted', 'skipped'];
