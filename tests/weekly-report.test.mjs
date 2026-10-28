@@ -7,7 +7,13 @@ assert.equal(isSunday(new Date('2026-09-14T06:00:00Z')), false);
 assert.equal(weekKey(new Date('2026-09-13T06:00:00Z')), '2026-09-06_2026-09-13');
 
 assert.equal(weeklyHealth({ extensionVersion: current, runDays: 7, confirmed: 3, failed: 0 }, current).code, 'green');
-assert.equal(weeklyHealth({ extensionVersion: current, runDays: 5, confirmed: 3, failed: 0 }, current).code, 'orange');
+// 100% success stays green even with fewer run days or an older extension (caveat is in the reason line)
+const partialWeek = weeklyHealth({ extensionVersion: current, runDays: 5, confirmed: 3, failed: 0 }, current);
+assert.equal(partialWeek.code, 'green');
+assert.equal(partialWeek.icon, '✅');
+assert.equal(weeklyHealth({ extensionVersion: '1.2.16', runDays: 7, confirmed: 3, failed: 0 }, current).code, 'green');
+// some failures alongside confirmations, or nothing confirmed, is still orange
+assert.equal(weeklyHealth({ extensionVersion: current, runDays: 7, confirmed: 2, failed: 1 }, current).code, 'orange');
 assert.equal(weeklyHealth({ extensionVersion: current, runDays: 7, confirmed: 0, failed: 0 }, current).code, 'orange');
 assert.equal(weeklyHealth({ extensionVersion: current, runDays: 2, confirmed: 0, failed: 2 }, current).code, 'red');
 assert.equal(weeklyHealth({ extensionVersion: null, runDays: 0, confirmed: 0, failed: 0 }, current).code, 'red');
