@@ -157,5 +157,36 @@ Olivier Attia - oattia@gmail.com
 Report mailbox - report@gershonconsulting.com
 
 ================================================================
+2026-10-22 nightly  -  open PR triage (read-only review)
+================================================================
+Main is at a0c9ef1, extension 1.2.28 (data-first discovery), release
+1.4.0 (referrals) and the delivery engine already shipped. NOTE: the
+older sections above (1.2.16 / 1.2.18 blockers) are historical.
+Nothing was merged or closed by this review.
+
+PR #2  "Add campaign delivery engine foundation" (draft)
+  State: 93 commits behind main, conflicts (add/add delivery-engine.js).
+  Recommendation: CLOSE AS SUPERSEDED. main already has migration
+  0006_delivery_engine.sql, src/delivery-engine.js and its test.
+
+PR #4  "Implement NexaShare referral attribution and qualification" (draft)
+  State: 92 commits behind main, conflicts (deploy.yml, login.html,
+  referrals.js, worker.js).
+  Recommendation: CLOSE AS SUPERSEDED. Release 1.4.0 shipped referrals
+  (migration 0013, src/referrals.js, reward days). Its 0007 migration
+  would collide with main's 0007_report_signals.sql.
+
+PR #22 "Fix LinkedIn post-card readiness detection"
+  State: 8 behind main, conflicts only in src/worker.js (version).
+  Own tests all pass; sync-core.js syntax OK. Fix is sound and still
+  needed: main keeps the broad button[aria-pressed] selectors.
+  Recommendation: REWORK. Rebase on main, keep selector + test
+  changes, bump to 1.2.29 (main already has 1.2.28), re-run tests,
+  then merge. Do not commit a .zip (see gotchas).
+
+Next action: Olivier OK to close #2 and #4, and let Ariel rebase #22
+as 1.2.29.
+
+================================================================
 END OF HANDOFF
 ================================================================
