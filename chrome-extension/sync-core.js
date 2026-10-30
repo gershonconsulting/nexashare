@@ -559,7 +559,10 @@ function inspectLinkedInPage(finalAttempt = false) {
     '[data-urn*="activity"]',
     '[data-id*="urn:li:activity"]',
     '[data-entity-urn*="activity"]',
+    '[data-chameleon-result-urn*="activity"]',
     '[data-view-name="feed-full-update"]',
+    '[data-view-name*="feed-update"]',
+    '[data-testid*="feed-update"]',
     'article[data-urn]',
     'main article'
   ].join(','));
@@ -569,7 +572,7 @@ function inspectLinkedInPage(finalAttempt = false) {
   if (activityLinks.length) detectors.push('activity-link');
 
   const semanticControls = document.querySelectorAll(
-    '[data-view-name*="repost"], [data-view-name*="reshare"], button[aria-pressed], .social-actions-button, .social-reshare-button'
+    '[data-view-name*="repost"], [data-view-name*="reshare"], button[aria-pressed][aria-label*="repost" i], button[aria-pressed][aria-label*="reshare" i], .social-reshare-button'
   );
   if (semanticControls.length) detectors.push('semantic-control');
 
@@ -662,7 +665,10 @@ function extractCompanyPageFromDOM() {
     '[data-urn*="activity"]',
     '[data-id*="urn:li:activity"]',
     '[data-entity-urn*="activity"]',
+    '[data-chameleon-result-urn*="activity"]',
     '[data-view-name="feed-full-update"]',
+    '[data-view-name*="feed-update"]',
+    '[data-testid*="feed-update"]',
     'article[data-urn]',
     'main article'
   ];
@@ -681,6 +687,7 @@ function extractCompanyPageFromDOM() {
       item.getAttribute?.('data-urn') || '',
       item.getAttribute?.('data-id') || '',
       item.getAttribute?.('data-entity-urn') || '',
+      item.getAttribute?.('data-chameleon-result-urn') || '',
       ...[...(item.querySelectorAll?.('a[href]') || [])].slice(0, 20).map(link => link.href || '')
     ].join(' ');
     return evidence.match(/(?:urn:li:activity:|activity(?::|-))(\d{6,})/i)?.[1] || '';
@@ -688,7 +695,7 @@ function extractCompanyPageFromDOM() {
 
   const controlFor = item => {
     const semantic = item.querySelector(
-      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button[aria-pressed]'
+      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button[aria-pressed][aria-label*="repost" i], button[aria-pressed][aria-label*="reshare" i]'
     );
     if (semantic) {
       detectors.add('semantic-control');
@@ -735,7 +742,7 @@ function extractCompanyPageFromDOM() {
       return 't' + h.toString(36);
     };
     const semanticControls = [...document.querySelectorAll(
-      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button[aria-pressed], button, [role="button"]'
+      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button, [role="button"]'
     )].filter(node => {
       if (node.matches('[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button')) return true;
       const value = (node.getAttribute('aria-label') || '') + ' ' + (node.textContent || '');
@@ -985,13 +992,50 @@ async function clickAndConfirmRepostInPlace(matchText) {
     if (!candidate) continue;
     const raw = (candidate.innerText || '').replace(/\s+/g, ' ').replace(/^Feed post\s*/i, '').trim();
     const head = raw.slice(0, 140);
-    const marker = head.indexOf('\u2022');
-    const text = (marker === -1 ? raw : raw.slice(marker + 1)).replace(/^[\s\u00b7]+/, '').trim().toLowerCase();
+    const marker = head.indexOf('•');
+    const text = (marker === -1 ? raw : raw.slice(marker + 1)).replace(/^[\s·]+/, '').trim().toLowerCase();
     if (!wanted || text.slice(0, 240) === wanted || text.includes(wanted.slice(0, 120))) { card = candidate; break; }
+  }
+
+  // Fallback: re-find the card exactly the way extractCompanyPageFromDOM's text-hash
+  // fallback found it (walk up from a visible repost control), so a post discovered
+  // without a "control menu" anchor or an exact aria-label can still be matched.
+  let fallbackControl = null;
+  if (!card && wanted) {
+    const discoveryRepost = /repost|reshare|republier|republication|reposter|reposten|teilen|erneut teilen|volver a publicar|ripubblica|ricondividi/i;
+    const strictRepost = /repost|reshare|republier|reposter|reposten|erneut teilen|volver a publicar|ripubblica|ricondividi/i;
+    const controlsForFallback = [...document.querySelectorAll(
+      '[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button, button, [role="button"]'
+    )].filter(node => {
+      if (node.matches('[data-view-name*="repost"], [data-view-name*="reshare"], .social-reshare-button')) return true;
+      return discoveryRepost.test((node.getAttribute('aria-label') || '') + ' ' + (node.textContent || ''));
+    });
+    for (const control of controlsForFallback) {
+      let node = control;
+      let candidate = null;
+      for (let depth = 0; depth < 14 && node; depth++) {
+        node = node.parentElement;
+        if (!node) break;
+        const textLength = (node.innerText || '').replace(/\s+/g, ' ').trim().length;
+        if (textLength >= 40 && textLength <= 12000) candidate = node;
+        if (node.tagName === 'ARTICLE' || node.hasAttribute('data-urn')) break;
+      }
+      if (!candidate) continue;
+      const raw = (candidate.innerText || '').replace(/\s+/g, ' ').replace(/^Feed post\s*/i, '').trim();
+      const marker = raw.slice(0, 140).indexOf('•');
+      const text = (marker === -1 ? raw : raw.slice(marker + 1)).replace(/^[\s·]+/, '').trim().toLowerCase();
+      if (text.slice(0, 240) !== wanted && !text.includes(wanted.slice(0, 120))) continue;
+      const label = (control.getAttribute('aria-label') || '') + ' ' + (control.getAttribute('data-view-name') || '') + ' ' + (control.textContent || '');
+      if (!isVisible(control) || labelled(control, isCommentShare)) continue;
+      if (!isRepostControl(control) && !strictRepost.test(label)) continue;
+      card = candidate;
+      fallbackControl = control;
+      break;
+    }
   }
   if (!card) return { confirmed: false, detail: 'NexaShare could not find this post again on the LinkedIn page; it may have moved or been removed.' };
 
-  const button = [...card.querySelectorAll('button, [role="button"]')].filter(isVisible).find(isRepostControl);
+  const button = [...card.querySelectorAll('button, [role="button"]')].filter(isVisible).find(isRepostControl) || fallbackControl;
   if (!button) return { confirmed: false, detail: 'Repost button was not found on the visible LinkedIn post card.' };
   if (button.getAttribute('aria-pressed') === 'true' || labelled(button, isUndoRepost)) return { confirmed: false, detail: 'Post was already reposted.' };
   const before = describe(button);
