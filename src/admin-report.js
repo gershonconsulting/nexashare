@@ -278,6 +278,20 @@ export function buildAdminReportEmail(data, options = {}) {
     { label: 'Count', align: 'right', render: row => escapeHtml(row.count) }
   ]);
 
+  const diagnosticRows = (data.recent || []).filter(row => row.status === 'failed').map(row => ({
+    source: row.company_name || 'Unknown',
+    version: row.extension_version || 'unknown (old client)',
+    route: row.discovery_route || 'unknown',
+    reason: row.discovery_reason || row.detail || 'unclassified',
+    sourceType: row.source_type || 'unknown'
+  }));
+  const diagnosticsHtml = listTable('Failed repost diagnostics (latest attempts)', diagnosticRows, [
+    { label: 'Source', render: row => escapeHtml(row.source) },
+    { label: 'Version', render: row => escapeHtml(row.version) },
+    { label: 'Route', render: row => escapeHtml(row.route) },
+    { label: 'Reason', render: row => escapeHtml(row.reason) }
+  ]);
+
   const sourcesHtml = listTable('Most active sources', data.topSources, [
     { label: 'Source', render: row => escapeHtml(row.source) },
     { label: 'Confirmed', align: 'right', render: row => escapeHtml(row.confirmed) },
@@ -334,7 +348,7 @@ export function buildAdminReportEmail(data, options = {}) {
     from: ADMIN_REPORT_FROM,
     subject: `NexaShare Extension Report — ${dateLabel} · ${rateLabel(today.confirmed, today.failed)} · ${today.confirmed} confirmed, ${today.failed} failed`,
     text: textLines.join('\n'),
-    html: `<!doctype html><html><body style="margin:0;background:#eef3f8;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#0f2740"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:30px 14px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:760px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(15,39,64,.10)"><tr><td style="background:linear-gradient(135deg,#075985,#0a66c2);padding:28px;color:#fff"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.85">Daily extension report</div><div style="font-size:26px;font-weight:800;margin-top:6px">NexaShare — ${escapeHtml(dateLabel)}</div><div style="margin-top:10px;font-size:15px;opacity:.95">${escapeHtml(headline)}</div></td></tr><tr><td style="padding:26px">${alertsHtml}<table width="100%" cellspacing="0" style="border-collapse:collapse;font-size:14px">${metricRowsHtml}</table>${failuresHtml}${sourcesHtml}${teamsHtml}${deliveryHtml}${recentHtml}<p style="text-align:center;margin:30px 0 6px"><a href="${APP_ORIGIN}/dashboard.html#reposts" style="display:inline-block;background:#0a66c2;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:9px">Open the NexaShare dashboard</a></p><p style="font-size:12px;color:#8194a6;text-align:center;margin:14px 0 0">Covers the 24 hours before ${escapeHtml(data.generatedAt)}. A repost counts as confirmed only after LinkedIn acknowledges it. Sent automatically by the NexaShare Worker.</p></td></tr></table></td></tr></table></body></html>`
+    html: `<!doctype html><html><body style="margin:0;background:#eef3f8;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#0f2740"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:30px 14px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:760px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(15,39,64,.10)"><tr><td style="background:linear-gradient(135deg,#075985,#0a66c2);padding:28px;color:#fff"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.85">Daily extension report</div><div style="font-size:26px;font-weight:800;margin-top:6px">NexaShare — ${escapeHtml(dateLabel)}</div><div style="margin-top:10px;font-size:15px;opacity:.95">${escapeHtml(headline)}</div></td></tr><tr><td style="padding:26px">${alertsHtml}<table width="100%" cellspacing="0" style="border-collapse:collapse;font-size:14px">${metricRowsHtml}</table>${failuresHtml}${diagnosticsHtml}${sourcesHtml}${teamsHtml}${deliveryHtml}${recentHtml}<p style="text-align:center;margin:30px 0 6px"><a href="${APP_ORIGIN}/dashboard.html#reposts" style="display:inline-block;background:#0a66c2;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:9px">Open the NexaShare dashboard</a></p><p style="font-size:12px;color:#8194a6;text-align:center;margin:14px 0 0">Covers the 24 hours before ${escapeHtml(data.generatedAt)}. A repost counts as confirmed only after LinkedIn acknowledges it. Sent automatically by the NexaShare Worker.</p></td></tr></table></td></tr></table></body></html>`
   };
 }
 
