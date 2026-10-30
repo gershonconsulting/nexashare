@@ -8,7 +8,7 @@ import { ADMIN_PROGRESS_PATH, handleAdminProgress, ADMIN_DAILY_REPORT_SWITCH_PAT
 const APP_ORIGIN = 'https://nexashare.com';
 const DAILY_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
 export const DAILY_REPORT_CRON = '0 6 * * *';
-export const CURRENT_EXTENSION_VERSION = '1.2.28';
+export const CURRENT_EXTENSION_VERSION = '1.2.29';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({

@@ -10,7 +10,7 @@ import { rateLabel } from './reporting.js';
 
 const APP_ORIGIN = 'https://nexashare.com';
 
-export const ADMIN_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
+export const ADMIN_REPORT_FROM = 'GC NexaShare <nexashare@gershon.ai>';
 export const ADMIN_REPORT_TO = 'report@gershonconsulting.com';
 
 const REPOST_STATUSES = ['confirmed', 'failed', 'skipped', 'already_reposted'];
