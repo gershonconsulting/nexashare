@@ -78,7 +78,7 @@ export function buildWeeklyUserEmail(user, data, currentVersion, date = new Date
     'AI comment pilot — drafts only, not verified LinkedIn comments',
     'Drafts generated: ' + generated + '; copied: ' + copied + '; verified published: not available.',
     ...drafts.map(item => '- ' + (item.company_name || 'LinkedIn source') + ' | ' + (item.status === 'copied' ? 'Copied (publication unverified)' : 'Generated, not copied') + ' | ' + item.comment_text + ' | ' + (item.original_post_url || 'No post URL'))
-  ].join('\\n');
+  ].join('\n');
   const commentHtml = '<h3>AI comment pilot — ' + generated + ' drafts</h3><p>' + copied + ' copied. NexaShare cannot confirm whether comments were published on LinkedIn; no draft is counted as an automatic published comment.</p>' +
     (drafts.length ? drafts.map(item => '<div style="border-bottom:1px solid #e5e7eb;padding:10px 0"><b>' + escapeHtml(item.company_name || 'LinkedIn source') + '</b><div>' + escapeHtml(item.comment_text) + '</div><small>' + escapeHtml(item.status === 'copied' ? 'Copied — publication unverified' : 'Generated — not copied') + '</small><div><a href="' + escapeHtml(item.original_post_url || APP_ORIGIN) + '">Original post</a></div></div>').join('') : '<p>No AI comment drafts were generated this week.</p>');
   return {
