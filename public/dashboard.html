@@ -195,7 +195,7 @@ document.getElementById('repostGroups').addEventListener('click',async event=>{
   box.textContent='';
   const draft=document.createElement('div');draft.textContent=data.draft;draft.style.margin='8px 0';
   const copy=document.createElement('button');copy.type='button';copy.textContent='Copy comment';copy.className='btn btn-secondary';
-  copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(data.draft);copy.textContent='Copied'}catch(error){copy.textContent='Copy failed'}});
+  copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(data.draft);copy.textContent='Copied';if(data.draft_id)await api('/api/ai-comment-copy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({draftId:data.draft_id})});}catch(error){copy.textContent='Copy or tracking failed'}});
   const note=document.createElement('div');note.textContent='Draft only. Review it, then comment manually on LinkedIn.';note.style.marginTop='5px';
   box.append(draft,copy,note);
  }catch(error){box.textContent=error.message||'Draft failed';}
