@@ -12,6 +12,11 @@ export const RELEASE_NOTICE_FROM = 'GC NexaShare <nexashare@gershon.ai>';
 
 // Plain-language notes per version. Optional: versions without notes still announce.
 export const RELEASE_NOTES = {
+  '1.2.29': [
+    'LinkedIn readiness no longer mistakes unrelated toggle buttons (Follow, notifications) for post cards, which caused "post-card layout was not recognized" failures.',
+    'Current LinkedIn feed cards are recognised by their activity id, so those posts are reposted from their own post page.',
+    'Posts found by their text are found again reliably at repost time, fixing "could not find this post again on the LinkedIn page".'
+  ],
   '1.2.28': [
     'Company pages: posts are now found from LinkedIn\'s own feed data, so company reposts no longer fail with "post-card layout was not recognized".',
     'The newest post is reposted first; posts older than 30 days are skipped.',
