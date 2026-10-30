@@ -25,6 +25,20 @@ assert.match(userEmail.subject, /✅ NexaShare weekly report/);
 assert.match(userEmail.text, /Extension run days: 7\/7/);
 assert.match(userEmail.html, /v1\.2\.18/);
 
+const pilotUser = { id: 99, name: 'Olivier Attia', email: 'olivier@attia.com' };
+const pilotActivity = { ...activity, aiCommentDrafts: [
+  { company_name: 'MAbSilico', original_post_url: 'https://www.linkedin.com/feed/update/urn:li:activity:123', comment_text: 'Congratulations on this achievement!', status: 'copied' },
+  { company_name: 'Another Source', original_post_url: 'https://www.linkedin.com/feed/update/urn:li:activity:456', comment_text: 'Great initiative!', status: 'generated' }
+] };
+const pilotEmail = buildWeeklyUserEmail(pilotUser, pilotActivity, current, new Date('2026-09-13T06:00:00Z'));
+assert.match(pilotEmail.subject, /Olivier Attia.*2 AI comment drafts/);
+assert.match(pilotEmail.text, /Congratulations on this achievement!/);
+assert.match(pilotEmail.text, /Generated, not copied/);
+assert.match(pilotEmail.text, /publication unverified/);
+assert.match(pilotEmail.html, /MAbSilico/);
+assert.match(pilotEmail.html, /Great initiative!/);
+assert.doesNotMatch(pilotEmail.text, /2 published comments/);
+
 const adminEmail = buildWeeklyAdminEmail([
   { ...user, ...activity },
   { id: 2, name: 'No Run', email: 'norun@example.com', extensionVersion: current, lastSeenAt: null, runDays: 0, confirmed: 0, failed: 0, skipped: 0 }
