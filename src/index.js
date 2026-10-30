@@ -496,11 +496,25 @@ async function handleAPI(request, env, ctx) {
       });
       const draft = String(output?.response || '').trim().replace(/^["'“”]+|["'“”]+$/g, '').replace(/\s+/g, ' ').slice(0, 140);
       if (!draft || draft.split(/\s+/).length > 10) return jsonResponse({ error: 'Unable to produce a suitable short draft' }, 502);
-      return jsonResponse({ draft, original_post_url: repost.original_post_url, review_required: true, pilot: true });
+      const saved = await env.DB.prepare('INSERT INTO ai_comment_drafts (user_id, repost_id, comment_text) VALUES (?, ?, ?)').bind(user.id, id, draft).run();
+      return jsonResponse({ draft, draft_id: saved.meta?.last_row_id, original_post_url: repost.original_post_url, review_required: true, pilot: true });
     } catch (error) {
       console.error('AI comment draft failed', { userId: user.id, message: error?.message });
       return jsonResponse({ error: 'AI comment generation failed' }, 502);
     }
+  }
+
+  if (url.pathname === '/api/ai-comment-copy') {
+    if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
+    const user = await getUser(request, env);
+    if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
+    if (String(user.email || '').trim().toLowerCase() !== 'olivier@attia.com') return jsonResponse({ error: 'Pilot unavailable' }, 403);
+    if (request.headers.get('Origin') !== APP_ORIGIN) return jsonResponse({ error: 'Invalid request origin' }, 403);
+    const body = await request.json().catch(() => null);
+    const draftId = Number(body?.draftId);
+    if (!Number.isSafeInteger(draftId) || draftId <= 0) return jsonResponse({ error: 'Invalid draft' }, 400);
+    const updated = await env.DB.prepare("UPDATE ai_comment_drafts SET status = 'copied', copied_at = COALESCE(copied_at, datetime('now')) WHERE id = ? AND user_id = ?").bind(draftId, user.id).run();
+    return jsonResponse({ recorded: Boolean(updated.meta?.changes) });
   }
 
   if (url.pathname === '/api/user') {
