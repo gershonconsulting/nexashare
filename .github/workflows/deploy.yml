@@ -56,6 +56,9 @@ jobs:
       - name: Run company discovery checks
         run: node tests/company-discovery.test.mjs
 
+      - name: Run repost diagnostics regression checks
+        run: node tests/repost-diagnostics.test.mjs
+
       - name: Run extension release notice checks
         run: node tests/release-notice.test.mjs
 
