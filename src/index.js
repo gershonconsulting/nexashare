@@ -1,3 +1,4 @@
+import { handleCommentAPI, handlePublicApproval } from './comment-knowledge.js';
 import { ACCESS_MODE, SUCCESS_TARGET_PERCENT } from './access-policy.js';
 import { collectDailySeries } from './reporting.js';
 import { getIntelligence } from './intelligence.js';
@@ -448,6 +449,11 @@ async function handleAPI(request, env, ctx) {
         checked_at: new Date().toISOString()
       }, 503);
     }
+  }
+
+  if (url.pathname === '/api/comment-approval') return handlePublicApproval(request, env);
+  if (['/api/comment-knowledge', '/api/comment-approvals', '/api/comment-approvals/draft'].includes(url.pathname)) {
+    return handleCommentAPI(request, env, await getUser(request, env));
   }
 
   if (url.pathname === '/api/referrals/stripe-webhook' && request.method === 'POST') return handleReferralPayment(request, env);
