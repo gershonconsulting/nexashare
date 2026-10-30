@@ -732,6 +732,7 @@ async function handleAPI(request, env, ctx) {
     if (!user || !user.team_id) return jsonResponse({ error: 'Invalid extension token' }, 401);
     const body = await request.json();
     const outcomes = Array.isArray(body.outcomes) ? body.outcomes.slice(0, 100) : [];
+    const reportedVersion = typeof body.extensionVersion === 'string' ? body.extensionVersion.slice(0, 20) : null;
     let accepted = 0;
     for (const outcome of outcomes) {
       const allowed = ['confirmed', 'failed', 'already_reposted', 'skipped'];
@@ -741,8 +742,8 @@ async function handleAPI(request, env, ctx) {
       const outcomeId = typeof outcome.outcomeId === 'string' ? outcome.outcomeId.slice(0, 100) : null;
       const inserted = await env.DB.prepare(
         `INSERT OR IGNORE INTO reposts
-         (user_id, team_id, original_post_url, repost_url, post_text, hashtags, status, company_name, detail, attempted_at, confirmed_at, outcome_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (user_id, team_id, original_post_url, repost_url, post_text, hashtags, status, company_name, detail, attempted_at, confirmed_at, outcome_id, extension_version, source_type, source_id, source_vanity, discovery_route, discovery_reason, discovery_attempt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         user.id, user.team_id, postUrl,
         typeof outcome.repostUrl === 'string' && outcome.repostUrl.startsWith('https://www.linkedin.com/') ? outcome.repostUrl.slice(0, 1000) : null,
@@ -750,7 +751,14 @@ async function handleAPI(request, env, ctx) {
         JSON.stringify(extractHashtags(outcome.postTextSnippet)),
         status, String(outcome.companyName || '').slice(0, 100), String(outcome.detail || '').slice(0, 500),
         outcome.attemptedAt || new Date().toISOString(), status === 'confirmed' ? (outcome.confirmedAt || new Date().toISOString()) : null,
-        outcomeId
+        outcomeId,
+        reportedVersion,
+        String(outcome.diagnostic?.sourceType || '').slice(0, 30),
+        String(outcome.diagnostic?.sourceId || '').slice(0, 100),
+        String(outcome.diagnostic?.sourceVanity || '').slice(0, 100),
+        ['data','dom','none'].includes(outcome.diagnostic?.discoveryRoute) ? outcome.diagnostic.discoveryRoute : 'none',
+        String(outcome.diagnostic?.discoveryReason || '').slice(0, 150),
+        Math.max(0, Math.min(10, Number(outcome.diagnostic?.recoveryAttempt) || 0))
       ).run();
       if (!inserted.meta?.changes) continue;
       await recordDeliveryOutcome(env.DB, {
@@ -760,7 +768,6 @@ async function handleAPI(request, env, ctx) {
       });
       accepted++;
     }
-    const reportedVersion = typeof body.extensionVersion === 'string' ? body.extensionVersion : null;
     await touchExtensionToken(request, env, reportedVersion);
     try {
       await env.DB.prepare(
