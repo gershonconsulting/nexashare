@@ -31,11 +31,27 @@
     .cta-section{padding:80px 0;text-align:center;background:var(--dark);color:#fff}.cta-section h2{font-size:36px;margin-bottom:16px}.cta-section p{color:#aaa;font-size:18px;margin-bottom:32px}
     footer{padding:32px 0;background:var(--dark);border-top:1px solid #333;color:#888;font-size:13px;text-align:center}
     .ext-section{padding:60px 0;background:var(--white);text-align:center}.ext-section h2{font-size:28px;margin-bottom:12px}.ext-section p{color:var(--gray);margin-bottom:24px}
+    .nav-links{display:flex;gap:24px;align-items:center}
+    .nav-link{color:var(--gray);text-decoration:none}.nav-link:hover{color:var(--blue)}
+    .btn{max-width:100%;overflow-wrap:anywhere}
     @media(max-width:768px){.hero h1{font-size:32px}}
+    /* Phones (<480px): keep the header on one line and "Get Started" fully visible.
+       Features / How It Works are hidden here; the hero's "See How It Works" button and scrolling reach them. */
+    @media(max-width:479px){
+      .container{padding:0 16px}
+      nav{padding:12px 0}
+      nav .container{gap:12px}
+      .logo{font-size:19px;gap:8px;min-width:0}
+      .logo-icon{width:32px;height:32px;font-size:16px;flex:none}
+      .nav-link{display:none}
+      .nav-cta{padding:8px 16px;font-size:14px;white-space:nowrap;flex:none}
+      .hero{padding:56px 0 44px}
+      .hero p{font-size:17px}
+    }
   </style>
 </head>
 <body>
-  <nav><div class="container"><a href="/" class="logo"><div class="logo-icon">N</div>NexaShare</a><div style="display:flex;gap:24px;align-items:center"><a href="#features" style="color:var(--gray);text-decoration:none">Features</a><a href="#how" style="color:var(--gray);text-decoration:none">How It Works</a><a href="/login" class="btn btn-primary">Get Started</a></div></div></nav>
+  <nav><div class="container"><a href="/" class="logo"><div class="logo-icon">N</div>NexaShare</a><div class="nav-links"><a href="#features" class="nav-link">Features</a><a href="#how" class="nav-link">How It Works</a><a href="/login" class="btn btn-primary nav-cta">Get Started</a></div></div></nav>
   <section class="hero"><div class="container"><h1>Amplify your <span>LinkedIn</span> presence</h1><p>Use the NexaShare browser extension to repost configured company content through LinkedIn's visible interface and track confirmed and failed outcomes.</p><div class="hero-cta"><a href="/login.html" class="btn btn-primary">Connect with LinkedIn</a><a href="#how" class="btn btn-outline">See How It Works</a></div></div></section>
   <section class="features" id="features"><div class="container"><h2>Why teams choose NexaShare</h2><div class="feature-grid"><div class="feature-card"><h3>Auto-Detection</h3><p>Our Chrome extension monitors your company LinkedIn page and detects new posts in real time.</p></div><div class="feature-card"><h3>One-Click Repost</h3><p>Employees approve reposts from the extension popup. Content appears on their feed within seconds.</p></div><div class="feature-card"><h3>Team Dashboard</h3><p>Track engagement, see who is amplifying, and measure the reach of every campaign from one view.</p></div></div></div></section>
   <section class="how" id="how"><div class="container"><h2>How It Works</h2><div class="steps"><div class="step"><div class="step-num">1</div><h3>Install Extension</h3><p>Add the NexaShare Chrome extension.</p></div><div class="step"><div class="step-num">2</div><h3>Add Companies</h3><p>Enter LinkedIn company pages to monitor.</p></div><div class="step"><div class="step-num">3</div><h3>Auto-Sync</h3><p>Extension checks for new posts daily.</p></div><div class="step"><div class="step-num">4</div><h3>Amplify</h3><p>Content is reposted to employee profiles.</p></div></div></div></section>
