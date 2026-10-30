@@ -1,6 +1,7 @@
 import { collectDailySeries, dailyTableHtml, dailyTableText, rateLabel } from './reporting.js';
 const APP_ORIGIN = 'https://nexashare.com';
 const REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
+const ADMIN_REPORT_FROM = 'GC NexaShare <nexashare@gershon.ai>';   // internal admin digest: GC prefix
 const ADMIN_REPORT_TO = 'report@gershonconsulting.com';
 
 function escapeHtml(value) {
@@ -92,7 +93,7 @@ export function buildWeeklyAdminEmail(users, currentVersion, date = new Date(), 
   const textUsers = enriched.map(user => `${user.health.icon} ${user.name || user.email} <${user.email}> — extension ${user.extensionVersion ? `v${user.extensionVersion}` : 'not detected'}; ${user.confirmed} confirmed, ${user.failed} failed, ${rateLabel(user.confirmed, user.failed)}, ${user.skipped} skipped, ${user.runDays}/7 run days. ${user.reason}`).join('\n');
 
   return {
-    from: REPORT_FROM,
+    from: ADMIN_REPORT_FROM,
     to,
     subject: `NexaShare weekly administrator report · ${rangeLabel(date)} · ${rateLabel(totals.confirmed, totals.failed)} · ${healthCounts.green} green, ${healthCounts.orange} orange, ${healthCounts.red} red`,
     text: `NexaShare weekly administrator report\nWeek: ${rangeLabel(date)}\n\nUsers: ${enriched.length}\nStatus: ${healthCounts.green} green, ${healthCounts.orange} orange, ${healthCounts.red} red\nConfirmed: ${totals.confirmed}\nFailed: ${totals.failed}\nSkipped: ${totals.skipped}\nSuccess rate: ${rateLabel(totals.confirmed, totals.failed)}\nCurrent extension: v${currentVersion}\n\nEvery user\n${textUsers}\n\nDashboard: ${APP_ORIGIN}/dashboard.html#reposts`,
