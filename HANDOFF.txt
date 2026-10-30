@@ -48,6 +48,13 @@ Tests         : tests/content-guards.mjs - mojibake scan, duplicate-
 
 3. RECENTLY DONE  [DONE]
 ----------------------------------------------------------------
+- 2026-10-28 (nightly, PR open, not merged): weekly report health rule
+  in src/weekly-report.js - an account with confirmed > 0 and failed = 0
+  (100% success) is now green. Fewer than 7 run days or an older
+  extension no longer make it orange; they stay in the reason line.
+  Tests updated, NOT run (no build access). No version bump: the only
+  version in the repo is the extension manifest, and bumping it would
+  flag every user as outdated in these same reports.
 - 55 mojibake sequences repaired across public/index.html,
   dashboard.html and login.html; duplicated 'Why teams choose
   NexaShare' section removed; download link moved 1.2.11 -> 1.2.16.
@@ -97,6 +104,11 @@ Tests         : tests/content-guards.mjs - mojibake scan, duplicate-
 ----------------------------------------------------------------
 - Repost 0% - see 4(a). Root cause understood, fix written, not landed.
 - Daily report silently dead - see 4(b).
+- Daily report wording: 'ACTION NEEDED - no run recorded' is correct
+  (src/worker.js, ranYesterday false). The rate label already prints
+  'N/A - no attempts' for zero attempts (src/reporting.js rateLabel), so
+  a '0% success' line in a daily email is not produced by current main;
+  check which build is deployed before changing code.
 
 7. NEXT ACTION - START HERE
 ----------------------------------------------------------------
