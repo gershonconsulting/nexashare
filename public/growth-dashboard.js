@@ -4,6 +4,41 @@
   const stat = (label, value) => `<div class="stat"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(value)}</div></div>`;
   const activity = row => row.partial ? 'Today · in progress' : ({ green: 'Successful', orange: 'Some failures', red: 'All attempts failed', quiet: 'Ran · no attempts', no_run: 'No activity recorded' }[row.status]);
   let reportingRequest = 0;
+  let performanceRequest = 0, sourceRequest = 0;
+  const card = (label, value, note) => `<div class="stat"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(value)}</div><p class="stat-note">${escapeHtml(note)}</p></div>`;
+  const comparisonText = data => `${data.comparison.label}. Comparing ${data.comparison.current_from}–${data.comparison.current_to} with ${data.comparison.from}–${data.comparison.to} (UTC). ${data.comparison.excludes_today ? 'Today is excluded from growth comparisons; included in totals.' : ''}`;
+  window.loadPerformance = async () => {
+    const requestId = ++performanceRequest;
+    $('performanceMessage').textContent = 'Loading complete performance totals…';
+    $('summaryCards').innerHTML = '';
+    $('timelineChart').innerHTML = '';
+    $('mixChart').innerHTML = '';
+    $('performanceNext').textContent = 'Loading…';
+    try {
+      const data = await api(`/api/performance?days=${$('range').value}`);
+      if (requestId !== performanceRequest) return;
+      const t = data.totals;
+      $('summaryCards').innerHTML = card('Successful reposts', t.confirmed, 'Confirmed by LinkedIn') + card('Content growth', data.comparison.percent === null ? 'N/A' : `${data.comparison.percent > 0 ? '+' : ''}${data.comparison.percent}%`, `${data.comparison.current} vs ${data.comparison.previous} confirmed · completed days only`) + card('Publishing success', percentage(t.success_rate), `${t.confirmed} confirmed / ${t.attempts} attempts; skips excluded`) + card('Needs attention', t.failed, 'Failed attempts; review Activity') + card('Skipped / already reposted', t.skipped + t.already_reposted, 'Not new successful reposts');
+      $('performanceMessage').textContent = comparisonText(data);
+      $('performanceNext').textContent = data.narrative;
+      $('timelineSummary').textContent = `${data.from}–${data.to} UTC`;
+      const max = Math.max(1, ...data.daily.map(row => row.confirmed));
+      $('timelineChart').style.overflowX = 'auto';
+      $('timelineChart').innerHTML = data.daily.map(row => `<button type="button" class="bar-wrap" data-day="${row.day}" data-total="${row.processed}" style="min-width:28px" title="${row.day}: ${row.confirmed} confirmed, ${row.failed} failed${row.partial ? '; in progress' : ''}"><div class="bar" style="height:${Math.max(2, row.confirmed / max * 165)}px;opacity:${row.partial ? '.5' : '1'}"></div><span>${row.day.slice(5)}</span></button>`).join('');
+      $('mixChart').innerHTML = `<div class="legend">${[['Confirmed',t.confirmed],['Failed',t.failed],['Skipped',t.skipped],['Already reposted',t.already_reposted]].map(([label,value]) => `<p><span>${label}</span><strong>${value}</strong></p>`).join('')}</div>`;
+    } catch (error) { if (requestId === performanceRequest) { $('performanceMessage').textContent = `Performance unavailable. ${error.message}`; $('performanceNext').textContent = 'Try reloading the dashboard.'; } }
+  };
+  window.loadSourceSummary = async () => {
+    const requestId = ++sourceRequest;
+    $('companySummary').innerHTML = '';
+    $('sourceSummaryMessage').textContent = 'Loading complete source totals…';
+    try {
+      const data = await api(`/api/performance?days=${$('summaryPeriod').value}`);
+      if (requestId !== sourceRequest) return;
+      $('sourceSummaryMessage').textContent = `${data.from}–${data.to} UTC · Up to ${data.source_limit} sources ranked by publishing volume.`;
+      $('companySummary').innerHTML = data.sources.length ? data.sources.map(row => `<article class="company-card"><h3>${escapeHtml(row.source)}</h3><div class="metrics"><div class="metric"><span>Confirmed reposts</span><b>${row.confirmed}</b></div><div class="metric"><span>Failed attempts</span><b>${row.failed}</b></div><div class="metric"><span>Publishing success</span><b>${percentage(row.success_rate)}</b></div><div class="metric"><span>Skipped / already reposted</span><b>${row.skipped}</b></div></div><p class="muted">Latest outcome: ${escapeHtml(fmt(row.last_activity))}</p><p class="muted">Engagement on your reposts: Data unavailable</p></article>`).join('') : '<p class="empty">No recorded source activity for this period. Add a source or check Extension health.</p>';
+    } catch (error) { if (requestId === sourceRequest) $('sourceSummaryMessage').textContent = `Source summary unavailable. ${error.message}`; }
+  };
   async function loadReporting() {
     const requestId = ++reportingRequest;
     $('reportingMessage').textContent = 'Loading complete account totals…';
@@ -11,6 +46,9 @@
       const data = await api(`/api/reporting/daily?days=${$('reportingPeriod').value}`);
       if (requestId !== reportingRequest) return;
       const t = data.totals;
+      const performance = await api(`/api/performance?days=${$('reportingPeriod').value}`);
+      if (requestId !== reportingRequest) return;
+      $('reportGrowth').textContent = comparisonText(performance);
       const goal = data.proof_of_concept;
       const progress = $('proofOfConceptProgress');
       progress.className = 'notice' + (goal.attempts && !goal.target_met ? ' warning' : '');
@@ -27,7 +65,7 @@
       }).join('');
       $('successChart').innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Daily repost success percentages; the table below contains exact values"><line x1="40" y1="20" x2="${width}" y2="20" stroke="#e4e7ec"/><text x="0" y="24" font-size="11">100%</text><line x1="40" y1="57.5" x2="${width}" y2="57.5" stroke="#0a66c2" stroke-dasharray="5 4"/><text x="0" y="61" font-size="11" fill="#0a66c2">75%</text><line x1="40" y1="170" x2="${width}" y2="170" stroke="#e4e7ec"/><text x="10" y="174" font-size="11">0%</text>${svg}</svg>`;
       $('reportingMessage').textContent = `${data.from} to ${data.to} · ${t.attempts} attempts · skips excluded from success rate.`;
-    } catch (error) { if (requestId === reportingRequest) $('reportingMessage').textContent = error.message; }
+    } catch (error) { if (requestId === reportingRequest) { $('reportingMessage').textContent = error.message; $('reportingTotals').innerHTML = ''; $('dailySuccessRows').innerHTML = ''; $('successChart').innerHTML = ''; $('reportGrowth').textContent = 'Growth comparison unavailable.'; } }
   }
   async function loadReferrals() {
     $('referralMessage').textContent = 'Loading your referral program…';
@@ -61,9 +99,10 @@
     } catch (error) { if (requestId === intelligenceRequest) $('intelligenceMessage').textContent = error.message; }
     finally { if (requestId === intelligenceRequest) $('generateIntelligence').disabled = false; }
   }
-  const loaders = { reporting: loadReporting, referral: loadReferrals, intelligence: () => loadIntelligence() };
+  const loaders = { dashboard: window.loadPerformance, summary: window.loadSourceSummary, reporting: loadReporting, referral: loadReferrals, intelligence: () => loadIntelligence() };
   document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => loaders[button.dataset.view]?.()));
   $('reportingPeriod').addEventListener('change', loadReporting);
+  $('summaryPeriod').addEventListener('change', window.loadSourceSummary);
   $('intelligencePeriod').addEventListener('change', () => { $('intelligenceResult').hidden = true; loadIntelligence(); });
   $('generateIntelligence').addEventListener('click', () => loadIntelligence(true));
   $('copyReferral').addEventListener('click', async () => {

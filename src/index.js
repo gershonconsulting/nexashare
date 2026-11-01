@@ -1,4 +1,5 @@
 import { ACCESS_MODE, SUCCESS_TARGET_PERCENT } from './access-policy.js';
+import { collectPerformance } from './performance.js';
 import { collectDailySeries } from './reporting.js';
 import { getIntelligence } from './intelligence.js';
 import { referralCode, attributeReferral, getReferralDashboard, handleReferralPayment } from './referrals.js';
@@ -451,7 +452,7 @@ async function handleAPI(request, env, ctx) {
   }
 
   if (url.pathname === '/api/referrals/stripe-webhook' && request.method === 'POST') return handleReferralPayment(request, env);
-  if (['/api/referrals', '/api/reporting/daily', '/api/intelligence'].includes(url.pathname)) {
+  if (['/api/referrals', '/api/reporting/daily', '/api/performance', '/api/intelligence'].includes(url.pathname)) {
     const user = await getUser(request, env);
     if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
     const days = Number(url.searchParams.get('days') || 30);
@@ -460,6 +461,7 @@ async function handleAPI(request, env, ctx) {
     if (request.method === 'POST' && request.headers.get('Origin') !== APP_ORIGIN) return jsonResponse({ error: 'Invalid request origin' }, 403);
     try {
       if (url.pathname === '/api/referrals') return jsonResponse(await getReferralDashboard(env.DB, user, Boolean(env.STRIPE_WEBHOOK_SECRET)));
+      if (url.pathname === '/api/performance') return jsonResponse(await collectPerformance(env.DB, user.id, days));
       if (url.pathname === '/api/reporting/daily') return jsonResponse(await collectDailySeries(env.DB, user.id, days));
       const result = await getIntelligence(env, user, days, request.method === 'POST');
       return jsonResponse(result, result.status || 200);

@@ -1,3 +1,4 @@
+import { performanceNarrative, ENGAGEMENT_LIMITATION } from './performance.js';
 import { rateLabel } from './reporting.js';
 // Daily operations report for the NexaShare Chrome extension.
 //
@@ -172,7 +173,17 @@ export async function collectAdminReportData(db) {
     first(`SELECT COUNT(*) AS sent FROM daily_reports WHERE report_date = date('now')`)
   ]);
 
+  const userComparisons = await all(`SELECT u.id, u.name, u.email,
+    (SELECT extension_version FROM extension_tokens WHERE user_id = u.id AND revoked_at IS NULL ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1) AS extension_version,
+    SUM(CASE WHEN r.status = 'confirmed' AND datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime('now', '-1 day') THEN 1 ELSE 0 END) AS confirmed,
+    SUM(CASE WHEN r.status = 'failed' AND datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime('now', '-1 day') THEN 1 ELSE 0 END) AS failed,
+    SUM(CASE WHEN r.status = 'confirmed' AND datetime(COALESCE(r.attempted_at, r.created_at)) < datetime('now', '-1 day') THEN 1 ELSE 0 END) AS previous_confirmed
+    FROM users u LEFT JOIN reposts r ON r.user_id = u.id
+      AND datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime('now', '-2 day')
+      AND datetime(COALESCE(r.attempted_at, r.created_at)) <= datetime('now')
+    GROUP BY u.id ORDER BY confirmed DESC, failed DESC, u.id LIMIT 1000`);
   return {
+    userComparisons,
     generatedAt: new Date().toISOString(),
     today: countsByStatus(todayRows),
     yesterday: countsByStatus(yesterdayRows),
@@ -277,6 +288,12 @@ export function buildAdminReportEmail(data, options = {}) {
     { label: 'Reason', render: row => escapeHtml(row.reason) },
     { label: 'Count', align: 'right', render: row => escapeHtml(row.count) }
   ]);
+  const userComparisonHtml = listTable('User publishing comparison · last 24h vs previous 24h (up to 1,000 users)', data.userComparisons || [], [
+    { label: 'User', render: row => escapeHtml(row.name || row.email) },
+    { label: 'Extension', render: row => escapeHtml(row.extension_version || 'Not detected') },
+    { label: 'Success', render: row => escapeHtml(rateLabel(row.confirmed, row.failed)) },
+    { label: 'Growth / next step', render: row => escapeHtml(performanceNarrative(row, { confirmed: Number(row.previous_confirmed || 0) })) }
+  ]);
 
   const diagnosticRows = (data.recent || []).filter(row => row.status === 'failed').map(row => ({
     source: row.company_name || 'Unknown',
@@ -328,6 +345,8 @@ export function buildAdminReportEmail(data, options = {}) {
     `NexaShare Extension Report — ${dateLabel}`,
     '',
     headline,
+    performanceNarrative(today, data.yesterday),
+    ENGAGEMENT_LIMITATION,
     '',
     ...metrics.map(([label, value, note]) => `- ${label}: ${value}${note ? ` (${note})` : ''}`),
     ''
@@ -342,13 +361,14 @@ export function buildAdminReportEmail(data, options = {}) {
     textLines.push('Most active sources:', ...data.topSources.map(row => `- ${row.source}: ${row.confirmed} confirmed / ${row.failed} failed of ${row.attempts}`), '');
   }
   textLines.push(`Dashboard: ${APP_ORIGIN}/dashboard.html#reposts`);
+  textLines.push('User publishing comparison · last 24h vs previous 24h (up to 1,000 users)', ...(data.userComparisons || []).map(row => `${row.name || row.email}: extension ${row.extension_version || 'not detected'}; ${rateLabel(row.confirmed, row.failed)}; ${performanceNarrative(row, {confirmed: Number(row.previous_confirmed || 0)})}`));
 
   return {
     to,
     from: ADMIN_REPORT_FROM,
     subject: `NexaShare Extension Report — ${dateLabel} · ${rateLabel(today.confirmed, today.failed)} · ${today.confirmed} confirmed, ${today.failed} failed`,
     text: textLines.join('\n'),
-    html: `<!doctype html><html><body style="margin:0;background:#ffffff;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#12211d"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:30px 14px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border:1px solid #dfe5e2;border-radius:12px;overflow:hidden"><tr><td style="background:#ffffff;padding:28px 28px 18px;border-bottom:2px solid #1f6f5c;color:#12211d"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#12211d">Daily extension report</div><div style="font-size:26px;font-weight:800;margin-top:6px;color:#12211d">NexaShare — ${escapeHtml(dateLabel)}</div><div style="margin-top:10px;font-size:15px;color:#12211d">${escapeHtml(headline)}</div></td></tr><tr><td style="padding:26px">${alertsHtml}<table width="100%" cellspacing="0" style="border-collapse:collapse;font-size:14px">${metricRowsHtml}</table>${failuresHtml}${diagnosticsHtml}${sourcesHtml}${teamsHtml}${deliveryHtml}${recentHtml}<p style="text-align:center;margin:30px 0 6px"><a href="${APP_ORIGIN}/dashboard.html#reposts" style="display:inline-block;background:#ffffff;color:#1f6f5c;text-decoration:underline;font-weight:700;padding:12px 22px;border:2px solid #1f6f5c;border-radius:9px">Open the NexaShare dashboard</a></p><p style="font-size:12px;color:#8194a6;text-align:center;margin:14px 0 0">Covers the 24 hours before ${escapeHtml(data.generatedAt)}. A repost counts as confirmed only after LinkedIn acknowledges it. Sent automatically by the NexaShare Worker.</p></td></tr></table></td></tr></table></body></html>`
+    html: `<!doctype html><html lang="en" dir="ltr"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>NexaShare report</title></head><body lang="en" dir="ltr" style="margin:0;background:#ffffff;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#12211d"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:30px 14px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border:1px solid #dfe5e2;border-radius:12px;overflow:hidden"><tr><td style="background:#ffffff;padding:28px 28px 18px;border-bottom:2px solid #1f6f5c;color:#12211d"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#12211d">Daily extension report</div><div style="font-size:26px;font-weight:800;margin-top:6px;color:#12211d">NexaShare — ${escapeHtml(dateLabel)}</div><div style="margin-top:10px;font-size:15px;color:#12211d">${escapeHtml(headline)}</div></td></tr><tr><td style="padding:26px">${alertsHtml}<h2 style="font-size:18px">Publishing growth and next steps</h2><p>${escapeHtml(performanceNarrative(today, data.yesterday))}</p><p style="font-size:13px;color:#475467">${escapeHtml(ENGAGEMENT_LIMITATION)}</p><table width="100%" cellspacing="0" style="border-collapse:collapse;font-size:14px">${metricRowsHtml}</table>${userComparisonHtml}${failuresHtml}${diagnosticsHtml}${sourcesHtml}${teamsHtml}${deliveryHtml}${recentHtml}<p style="text-align:center;margin:30px 0 6px"><a href="${APP_ORIGIN}/dashboard.html#reposts" style="display:inline-block;background:#ffffff;color:#1f6f5c;text-decoration:underline;font-weight:700;padding:12px 22px;border:2px solid #1f6f5c;border-radius:9px">Open the NexaShare dashboard</a></p><p style="font-size:12px;color:#8194a6;text-align:center;margin:14px 0 0">Covers the 24 hours before ${escapeHtml(data.generatedAt)}. A repost counts as confirmed only after LinkedIn acknowledges it. Sent automatically by the NexaShare Worker.</p></td></tr></table></td></tr></table></body></html>`
   };
 }
 
