@@ -12,6 +12,9 @@ export const RELEASE_NOTICE_FROM = 'GC NexaShare <nexashare@gershon.ai>';
 
 // Plain-language notes per version. Optional: versions without notes still announce.
 export const RELEASE_NOTES = {
+  '1.2.30': [
+    'The official NexaShare share-arrow icon now appears in the Chrome toolbar, extension management page and popup, matching the website and mobile shortcut branding.'
+  ],
   '1.2.29': [
     'LinkedIn readiness no longer mistakes unrelated toggle buttons (Follow, notifications) for post cards, which caused "post-card layout was not recognized" failures.',
     'Current LinkedIn feed cards are recognised by their activity id, so those posts are reposted from their own post page.',

@@ -1,0 +1,6 @@
+/* Shared canonical mark. Adjacent NexaShare text supplies the accessible name. */
+img.nexashare-mark{display:inline-block;width:36px;height:36px;object-fit:contain;flex:none;vertical-align:middle;background:transparent;border-radius:0}
+.sidebar img.nexashare-mark{width:28px;height:28px}
+header img.nexashare-mark{width:32px;height:32px}
+.nav a:has(>img.nexashare-mark){display:inline-flex;align-items:center;gap:10px}
+@media(max-width:480px){.logo img.nexashare-mark{width:32px;height:32px}}

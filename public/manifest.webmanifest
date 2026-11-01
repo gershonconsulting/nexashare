@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "NexaShare",
+  "short_name": "NexaShare",
+  "description": "LinkedIn content amplification and verified publishing progress.",
+  "start_url": "/dashboard.html",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#ff1c4b",
+  "background_color": "#ffffff",
+  "icons": [
+    { "src": "/branding/nexashare-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/branding/nexashare-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/branding/nexashare-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

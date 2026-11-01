@@ -34,6 +34,9 @@ jobs:
       - name: Run Worker smoke checks
         run: node tests/worker-smoke.mjs
 
+      - name: Validate canonical branding assets
+        run: node tests/branding.test.mjs
+
       - name: Run admin daily report checks
         run: node tests/admin-report.test.mjs
 

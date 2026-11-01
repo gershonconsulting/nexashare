@@ -20,20 +20,26 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
+      "16": "chrome-extension/icons/icon16.png",
+      "32": "chrome-extension/icons/icon32.png",
+      "48": "chrome-extension/icons/icon48.png",
+      "128": "chrome-extension/icons/icon128.png"
     }
   },
   "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "16": "chrome-extension/icons/icon16.png",
+    "32": "chrome-extension/icons/icon32.png",
+    "48": "chrome-extension/icons/icon48.png",
+    "128": "chrome-extension/icons/icon128.png"
   },
   "content_scripts": [
     {
-      "matches": ["https://*.linkedin.com/*"],
-      "js": ["js/content.js"],
+      "matches": [
+        "https://*.linkedin.com/*"
+      ],
+      "js": [
+        "js/content.js"
+      ],
       "run_at": "document_end"
     }
   ]
