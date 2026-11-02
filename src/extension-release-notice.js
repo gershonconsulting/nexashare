@@ -12,6 +12,11 @@ export const RELEASE_NOTICE_FROM = 'GC NexaShare <nexashare@gershon.ai>';
 
 // Plain-language notes per version. Optional: versions without notes still announce.
 export const RELEASE_NOTES = {
+  '1.2.31': [
+    'Company discovery preserves available post commentary and reports unavailable text explicitly.',
+    'Reposts use atomic server reservations across devices and persist outcomes immediately. Uncertain confirmations are held for review.',
+    'Spanish and Italian direct repost menu labels are recognized alongside English, French and German.'
+  ],
   '1.2.30': [
     'The official NexaShare share-arrow icon now appears in the Chrome toolbar, extension management page and popup, matching the website and mobile shortcut branding.'
   ],

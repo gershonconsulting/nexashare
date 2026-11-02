@@ -55,7 +55,10 @@ jobs:
         run: node tests/access-policy.test.mjs
 
       - name: Run delivery engine checks
-        run: node tests/delivery-engine.test.mjs
+        run: |
+          node tests/delivery-engine.test.mjs
+          node tests/delivery-claims.test.mjs
+          node tests/linkedin-postcard.test.mjs
 
       - name: Run company discovery checks
         run: node tests/company-discovery.test.mjs

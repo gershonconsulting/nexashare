@@ -145,8 +145,8 @@ function loadPage(html, pathname = '/company/example/posts/') {
   const location = { pathname, href: `https://www.linkedin.com${pathname}`, origin: 'https://www.linkedin.com' };
   const getComputedStyle = node => ({ visibility: 'visible', display: node.hiddenInTree ? 'none' : 'block' });
   const fns = new Function('document', 'location', 'getComputedStyle',
-    `${extractFunction('inspectLinkedInPage')}\n${extractFunction('extractCompanyPageFromDOM')}\n${extractFunction('clickAndConfirmRepostInPlace')}\n` +
-    'return { inspectLinkedInPage, extractCompanyPageFromDOM, clickAndConfirmRepostInPlace };'
+    `${extractFunction('inspectLinkedInPage')}\n${extractFunction('extractCompanyPageFromDOM')}\n${extractFunction('clickAndConfirmRepostInPlace')}\n${extractFunction('clickAndConfirmRepost')}\n` +
+    'return { inspectLinkedInPage, extractCompanyPageFromDOM, clickAndConfirmRepostInPlace, clickAndConfirmRepost };'
   )(document, location, getComputedStyle);
   return { document, ...fns };
 }
@@ -215,4 +215,29 @@ function loadPage(html, pathname = '/company/example/posts/') {
   assert.ok(page.document.querySelectorAll('button, [role="button"]').every(node => !node.clicked));
 }
 
-console.log('linkedin post-card fixture checks passed');
+// Both posting paths must choose the direct action and leave quote/comment alone.
+for (const [control, direct, quote] of [
+  ['Repost', 'Repost instantly', 'Repost with your thoughts'],
+  ['Republier', 'Republier instantanément', 'Republier avec un commentaire'],
+  ['Reposten', 'Jetzt reposten', 'Mit Kommentar reposten'],
+  ['Volver a publicar', 'Volver a publicar', 'Volver a publicar con tus ideas'],
+  ['Ripubblica', 'Ripubblica', 'Ripubblica con un commento']
+]) {
+  for (const inPlace of [false, true]) {
+    const html = (await fixture('linkedin-feed-inplace-card.html'))
+      .replace('id="repost1">Repost', `id="repost1">${control}`)
+      .replace('id="instant1">Repost instantly', `id="instant1">${direct}`)
+      .replace('Repost with your thoughts', quote);
+    const page = loadPage(html);
+    const target = page.extractCompanyPageFromDOM().posts.find(post => /assay platform/.test(post.matchText));
+    const button = page.document.byId('repost1');
+    button.onClick = () => page.document.byId('menu1').removeAttribute('hidden');
+    page.document.byId('instant1').onClick = () => button.setAttribute('aria-pressed', 'true');
+    const result = inPlace ? await page.clickAndConfirmRepostInPlace(target.matchText) : await page.clickAndConfirmRepost();
+    assert.equal(result.confirmed, true, `${control}, inPlace=${inPlace}: ${result.detail}`);
+    assert.equal(button.clicked, 1);
+    assert.equal(page.document.byId('instant1').clicked, 1);
+    assert.ok(!page.document.byId('share1').clicked);
+  }
+}
+console.log('linkedin post-card and five-locale fixture checks passed');
