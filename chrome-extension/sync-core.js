@@ -117,9 +117,11 @@ async function authenticatedFetch(path, options = {}) {
   if (!stored.apiToken || stored.apiBase !== API_BASE) throw new Error('Connect the extension from the NexaShare dashboard first.');
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: { ...(options.headers || {}), Authorization: `Bearer ${stored.apiToken}` }
+    headers: { ...(options.headers || {}), Authorization: `Bearer ${stored.apiToken}`, 'X-NexaShare-Extension-Version': EXTENSION_VERSION }
   });
-  if (!response.ok) throw new Error(`NexaShare API returned HTTP ${response.status}. Reconnect the extension from the dashboard.`);
+  if (!response.ok) throw new Error(response.status === 409
+    ? 'Update the NexaShare extension from the dashboard before reposting.'
+    : `NexaShare API returned HTTP ${response.status}. Reconnect the extension from the dashboard.`);
   return response.json();
 }
 
@@ -239,19 +241,31 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
         }
         candidateHandled = true;
         try {
-          await authenticatedFetch('/api/extension/deliveries/processing', {
+          const claim = await authenticatedFetch('/api/extension/deliveries/processing', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ postUrl: post.url })
+            body: JSON.stringify({ postUrl: deliveryPostUrl(post) })
           });
+          if (claim.acquired !== true) {
+            await log('info', 'repost:claim-blocked', { postId: post.id });
+            continue;
+          }
           await chrome.storage.local.set({ syncProgress: { runId: activeRunId, state: 'running', stage: `Attempting repost for ${company.name || company.vanity || 'source'}`, source: company.name || company.vanity || '', trigger, ts: new Date().toISOString() } });
           await log('info', 'repost:attempt', { company: company.name || company.vanity, postUrl: post.url });
           const result = await repostContent(post);
           await log(result.confirmed ? 'info' : 'error', result.confirmed ? 'repost:confirmed' : 'repost:failed', { company: company.name || company.vanity, detail: result.detail, repostUrl: result.repostUrl || null });
-          outcomes.push(outcomeFor( post, result.confirmed ? 'confirmed' : 'failed', result.detail, result.repostUrl));
-          if (result.confirmed) rememberPost(seen, post.id);
+          const alreadyReposted = /post was already reposted/i.test(result.detail || '');
+          outcomes.push(outcomeFor( post, result.confirmed ? 'confirmed' : alreadyReposted ? 'already_reposted' : 'failed', result.detail, result.repostUrl));
+          if (result.confirmed || alreadyReposted) {
+            rememberPost(seen, post.id);
+            processedPostIds[sourceKey] = [...seen].slice(-500);
+            await chrome.storage.local.set({ processedPostIds });
+          }
+          // Persist each outcome immediately, before another source or sleep.
+          await chrome.storage.local.set({ pendingOutcomes: outcomes.slice(-200) });
         } catch (error) {
-          outcomes.push(outcomeFor( post, 'failed', String(error)));
+          outcomes.push(outcomeFor( post, 'failed', 'LinkedIn did not return an outcome. ' + String(error)));
+          await chrome.storage.local.set({ pendingOutcomes: outcomes.slice(-200) });
         }
         await sleep(REPOST_DELAY_MS + Math.random() * 2000);
         break;
@@ -637,13 +651,31 @@ async function discoverCompanyPostsViaData(vanity) {
     });
     if (!apiRes.ok) { result.reason = 'api_http_' + apiRes.status; return result; }
     const body = await apiRes.text();
+    // Read only commentary tied to this activity, never actor names, quoted
+    // posts or unrelated text elsewhere in the normalized response.
+    const textById = new Map();
+    try {
+      const payload = JSON.parse(body);
+      const entities = Array.isArray(payload.included) ? payload.included : [];
+      const byUrn = new Map(entities.map(entity => [entity.entityUrn, entity]));
+      for (const entity of entities) {
+        const identity = String(entity.entityUrn || entity.updateUrn || '');
+        const id = (identity.match(/(?:activity:|updateV2:\(urn:li:activity:)(\d{15,})/) || [])[1];
+        if (!id) continue;
+        const commentary = entity.commentary || byUrn.get(entity['*commentary']);
+        const value = typeof commentary === 'string' ? commentary : (commentary?.text?.text || commentary?.text);
+        if (typeof value === 'string' && value.trim()) textById.set(id, value.trim().slice(0, 2000));
+      }
+    } catch (_) { /* Discovery still works when text cannot be recovered. */ }
     const ids = [...new Set(body.match(/urn:li:activity:\d{15,}/g) || [])].map(urn => urn.split(':').pop());
     ids.sort((a, b) => (BigInt(b) > BigInt(a) ? 1 : BigInt(b) < BigInt(a) ? -1 : 0));
     result.posts = ids.map(id => ({
       id,
       url: 'https://www.linkedin.com/feed/update/urn:li:activity:' + id + '/',
       postedAt: new Date(Number(BigInt(id) >> 22n)).toISOString(),
-      text: '',
+      text: textById.get(id) || '',
+      textStatus: textById.has(id) ? 'available' : 'unavailable',
+      textReason: textById.has(id) ? '' : 'company_data_commentary_missing',
       alreadyReposted: false
     }));
     result.ok = result.posts.length > 0;
@@ -725,7 +757,7 @@ function extractCompanyPageFromDOM() {
       alreadyReposted: !!button && (
         button.getAttribute('aria-pressed') === 'true' ||
         button.classList.contains('react-button--active') ||
-        /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/i.test(controlText)
+        /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen|deshacer republicación|eliminar republicación|annulla ripubblicazione|rimuovi ripubblicazione/i.test(controlText)
       )
     });
   }
@@ -774,7 +806,7 @@ function extractCompanyPageFromDOM() {
         matchText,
         text: bodyText.slice(0, 1200),
         alreadyReposted: control.getAttribute('aria-pressed') === 'true' ||
-          /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/i.test(control.getAttribute('aria-label') || '')
+          /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen|deshacer republicación|eliminar republicación|annulla ripubblicazione|rimuovi ripubblicazione/i.test(control.getAttribute('aria-label') || '')
       });
     }
   }
@@ -816,7 +848,7 @@ async function repostContent(post) {
       const traceId = crypto.randomUUID();
       await captureDiagnostic(tabId, traceId, 'post_ready', { postId: post.id, attempt, url: post.url, readiness });
       const results = await chrome.scripting.executeScript({ target: { tabId }, func: clickAndConfirmRepost });
-      const outcome = results?.[0]?.result || { confirmed: false, retryable: true, detail: 'LinkedIn did not return an outcome.' };
+      const outcome = results?.[0]?.result || { confirmed: false, detail: 'LinkedIn did not return an outcome.' };
       await captureDiagnostic(tabId, traceId, outcome.confirmed ? 'repost_confirmed' : 'repost_failed', { postId: post.id, attempt, outcome });
       return outcome;
     });
@@ -884,15 +916,17 @@ async function clickAndConfirmRepost() {
     return !!box && box.width > 0 && box.height > 0 && getComputedStyle(item).visibility !== 'hidden' && getComputedStyle(item).display !== 'none';
   };
   const describe = item => `${item?.getAttribute?.('aria-label') || ''} ${item?.getAttribute?.('data-view-name') || ''} ${item?.textContent || ''}`.replace(/\s+/g, ' ').trim().toLowerCase();
-  const isRepostControl = value => /\brepost\b|\breshare\b|republier|republication|reposter|reposten|teilen|erneut teilen|volver a publicar|compartir de nuevo|ripubblica|ricondividi/.test(value);
+  const isRepostControl = value => /\brepost\b|\breshare\b|republier|republication|reposter|reposten|erneut teilen|volver a publicar|compartir de nuevo|ripubblica|ricondividi/.test(value);
   const isCommentShare = value => /with your thoughts|quote|ajouter (?:vos|mes) réflexions|avec (?:vos|mes) réflexions|avec un commentaire|gedanken hinzufügen|mit (?:ihren|deinen|eigenen) gedanken|mit kommentar/.test(value);
-  const isUndoRepost = value => /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen/.test(value);
+  const isUndoRepost = value => /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen|deshacer republicación|eliminar republicación|annulla ripubblicazione|rimuovi ripubblicazione/.test(value);
   const isInstantRepost = value => /^(?:repost|reshare) instantly\b/.test(value)
     || /^(?:repost|reshare)\b[^]*\binstantly\b/.test(value)
     || /^republier (?:instantanément|maintenant)\b/.test(value)
     || /^republier\b[^]*instantan/.test(value)
     || /^(?:jetzt|sofort|direkt) reposten\b/.test(value)
-    || /^reposten\b/.test(value);
+    || /^reposten\b/.test(value)
+    || /^(?:volver a publicar|compartir de nuevo)(?: ahora| al instante)?$/.test(value)
+    || /^(?:ripubblica|ricondividi)(?: ora| subito)?$/.test(value);
   // LinkedIn labels some controls with BOTH aria-label and identical inner text, so the
   // concatenated describe() reads "repost repost" and anchored predicates never match.
   const labelsOf = item => [item?.getAttribute?.('aria-label') || '', item?.getAttribute?.('data-view-name') || '', item?.textContent || '']
@@ -900,8 +934,8 @@ async function clickAndConfirmRepost() {
     .filter(Boolean)
     .concat(describe(item));
   const labelled = (item, predicate) => labelsOf(item).some(predicate);
-  const isSuccessNotice = value => /repost successful|reposted|post shared|shared successfully|republication réussie|publication republiée|a été republié|erfolgreich repostet|beitrag (?:wurde )?repostet|repost erfolgreich/.test(value) && !/could not|error|failed|impossible|erreur|échec|fehlgeschlagen|fehler/.test(value);
-  const isViewRepost = value => /view repost|view reshare|voir la republication|republication anzeigen|repost anzeigen/.test(value);
+  const isSuccessNotice = value => /repost successful|reposted|post shared|shared successfully|republication réussie|publication republiée|a été republié|erfolgreich repostet|beitrag (?:wurde )?repostet|repost erfolgreich|publicación compartida|se ha vuelto a publicar|post ripubblicato/.test(value) && !/could not|error|failed|impossible|erreur|échec|fehlgeschlagen|fehler|no se pudo|errore|non riuscit/.test(value);
+  const isViewRepost = value => /view repost|view reshare|voir la republication|republication anzeigen|repost anzeigen|ver republicación|visualizza ripubblicazione/.test(value);
   const controls = () => [...document.querySelectorAll('button, [role="button"], [data-view-name*="repost"], [data-view-name*="reshare"]')].filter(isVisible);
   const button = controls().find(item => {
     const value = describe(item);
@@ -963,10 +997,12 @@ async function clickAndConfirmRepostInPlace(matchText) {
     || /^republier (?:instantanément|maintenant)\b/.test(value)
     || /^republier\b[^]*instantan/.test(value)
     || /^(?:jetzt|sofort|direkt) reposten\b/.test(value)
-    || /^reposten\b/.test(value);
+    || /^reposten\b/.test(value)
+    || /^(?:volver a publicar|compartir de nuevo)(?: ahora| al instante)?$/.test(value)
+    || /^(?:ripubblica|ricondividi)(?: ora| subito)?$/.test(value);
   const isUndoRepost = value => /undo repost|remove repost|annuler la republication|supprimer la republication|repost rückgängig|repost entfernen|repost löschen|nicht mehr teilen/.test(value);
-  const isSuccessNotice = value => /repost successful|reposted|post shared|shared successfully|républication réussie|republication réussie|publication republiée|a été republié|erfolgreich repostet|beitrag (?:wurde )?repostet|repost erfolgreich/.test(value) && !/could not|error|failed|impossible|erreur|échec|fehlgeschlagen|fehler/.test(value);
-  const isViewRepost = value => /view repost|view reshare|voir la republication|republication anzeigen|repost anzeigen/.test(value);
+  const isSuccessNotice = value => /repost successful|reposted|post shared|shared successfully|républication réussie|republication réussie|publication republiée|a été republié|erfolgreich repostet|beitrag (?:wurde )?repostet|repost erfolgreich|publicación compartida|se ha vuelto a publicar|post ripubblicato/.test(value) && !/could not|error|failed|impossible|erreur|échec|fehlgeschlagen|fehler|no se pudo|errore|non riuscit/.test(value);
+  const isViewRepost = value => /view repost|view reshare|voir la republication|republication anzeigen|repost anzeigen|ver republicación|visualizza ripubblicazione/.test(value);
   const isRepostControl = item => {
     const aria = (item.getAttribute('aria-label') || '').trim();
     const view = (item.getAttribute('data-view-name') || '').trim();
@@ -1161,16 +1197,23 @@ async function waitForTabReady(tabId) {
   await sleep(PAGE_LOAD_MS);
 }
 
+function deliveryPostUrl(post) {
+  // Text-identified cards share the company feed URL but are distinct posts.
+  return post.inPlace ? `${post.url.split('#')[0]}#nexashare-post=${encodeURIComponent(post.id)}` : post.url;
+}
+
 function makeOutcome(company, post, status, detail, repostUrl = '') {
   const timestamp = new Date().toISOString();
   return {
     outcomeId: crypto.randomUUID(),
     companyName: company.name,
-    postUrl: post.url,
+    postUrl: deliveryPostUrl(post),
     repostUrl: repostUrl || '',
     postTextSnippet: (post.text || '').slice(0, 2000),
     status,
-    detail,
+    detail: post.textStatus === 'unavailable' ? `${detail} [Post text unavailable: ${post.textReason}]` : detail,
+    textStatus: post.text ? 'available' : 'unavailable',
+    textReason: post.text ? '' : (post.textReason || 'post_text_not_found'),
     attemptedAt: timestamp,
     confirmedAt: status === 'confirmed' ? timestamp : null
   };

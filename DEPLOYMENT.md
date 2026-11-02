@@ -100,8 +100,8 @@ database. In Cloudflare's token builder these are:
 Limit the account resource to the owning account and the zone resource to
 `nexashare.com`. Do not store the token in the repository.
 
-The workflow is intentionally manual (`workflow_dispatch`) until DNS and
-secrets are ready. It:
+The workflow validates pull requests and deploys automatically on pushes to
+`main`. It also supports manual `workflow_dispatch`. It:
 
 1. Runs the Worker and extension checks.
 2. Applies pending remote D1 migrations.
@@ -130,9 +130,21 @@ It never uploads application files to Hostinger.
    - one manual Sync now run and one scheduled-run readiness check
    - confirmed and failed outcome history
 
-After the first release is verified, automatic deployment on pushes to `main`
-may be enabled by adding a `push` trigger. Keeping production manual is safer
-until then.
+Automatic deployment on pushes to `main` is enabled. Verify the matching
+successful workflow run, live health/version signal, deployed assets, and
+extension package before claiming a release.
+
+## Extension 1.2.31 compatibility gate
+
+The delivery-processing endpoint requires extension 1.2.31 or later because
+older clients ignore denied post reservations. Older clients receive HTTP 409
+before clicking LinkedIn; users must reload the updated unpacked extension.
+The website cannot silently update private unpacked installations.
+
+Post reservations do not expire automatically. A lost worker or uncertain
+confirmation remains held for review, preventing a duplicate click. A known
+pre-click failure can retry; published posts cannot be reserved again. Do not
+reset a held reservation without first checking LinkedIn for an existing repost.
 
 ## Daily extension report
 

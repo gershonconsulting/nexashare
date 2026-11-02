@@ -12,7 +12,7 @@ const LINKEDIN_REDIRECT_URI = `${APP_ORIGIN}/api/auth/callback`;
 const LINKEDIN_SCOPES = 'openid profile email';
 const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00';
 const SETUP_REMINDER_TYPE = 'missing_company_after_connection';
-const CURRENT_EXTENSION_VERSION = '1.2.30';
+const CURRENT_EXTENSION_VERSION = '1.2.31';
 const SETUP_REMINDER_FROM = 'NexaShare <hello@nexashare.com>';
 const DAILY_REPORT_TYPE = 'daily_repost_report';
 const REGISTRATION_NOTIFICATION_FROM = SETUP_REMINDER_FROM;
@@ -890,11 +890,19 @@ async function handleAPI(request, env, ctx) {
   if (url.pathname === '/api/extension/deliveries/processing' && request.method === 'POST') {
     const user = await getExtensionUser(request, env);
     if (!user || !user.team_id) return jsonResponse({ error: 'Invalid extension token' }, 401);
+    // Older clients ignore a denied reservation and would still click LinkedIn.
+    // A non-2xx response stops those clients before they perform any UI action.
+    const clientVersion = request.headers.get('X-NexaShare-Extension-Version') || '';
+    const versionParts = clientVersion.split('.').map(Number);
+    if (!/^\d+\.\d+\.\d+$/.test(clientVersion) ||
+        (versionParts[0] < 1 || (versionParts[0] === 1 && (versionParts[1] < 2 || (versionParts[1] === 2 && versionParts[2] < 31))))) {
+      return jsonResponse({ error: 'Update NexaShare to extension 1.2.31 or later before reposting.' }, 409);
+    }
     const body = await request.json();
     const postUrl = String(body.postUrl || '').slice(0, 1000);
     if (!postUrl.startsWith('https://www.linkedin.com/')) return jsonResponse({ error: 'A LinkedIn post URL is required' }, 400);
-    await markDeliveryProcessing(env.DB, { teamId: user.team_id, userId: user.id, postUrl });
-    return jsonResponse({ success: true });
+    const claim = await markDeliveryProcessing(env.DB, { teamId: user.team_id, userId: user.id, postUrl });
+    return jsonResponse({ success: true, ...claim });
   }
 
   if (url.pathname === '/api/campaign-health' && request.method === 'GET') {
