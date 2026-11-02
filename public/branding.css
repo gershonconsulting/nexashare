@@ -1,6 +1,31 @@
+/* Gershon design tokens, matched to https://linalysis.net/common.css. */
+:root{--brand:#FE1B04;--brand-dark:#d11200;--brand-light:#fff5f5;--text:#1d1d1f;--text-muted:#6e6e73;--border:#e5e7eb;--bg:#fafafa;--card:#ffffff;--radius:12px;--sidebar-w:240px;--topbar-h:64px;--blue:var(--brand);--blue-deep:var(--brand-dark);--soft-blue:var(--brand-light);--ink:var(--text);--navy:var(--text);--slate:var(--text-muted);--muted:var(--text-muted);--line:var(--border);--canvas:var(--bg)}
+body{color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
 /* Shared canonical mark. Adjacent NexaShare text supplies the accessible name. */
 img.nexashare-mark{display:inline-block;width:36px;height:36px;object-fit:contain;flex:none;vertical-align:middle;background:transparent;border-radius:0}
 .sidebar img.nexashare-mark{width:28px;height:28px}
 header img.nexashare-mark{width:32px;height:32px}
 .nav a:has(>img.nexashare-mark){display:inline-flex;align-items:center;gap:10px}
 @media(max-width:480px){.logo img.nexashare-mark{width:32px;height:32px}}
+/* Member workspace follows Linalysis's sidebar, topbar and card dimensions. */
+.app{grid-template-columns:var(--sidebar-w) minmax(0,1fr)}
+.sidebar{padding:18px 12px;box-shadow:none}
+.sidebar .brand{font-size:20px;padding:4px 10px 18px;color:var(--brand)}
+.nav-item{font-weight:500;box-shadow:none!important}
+.nav-item:hover{transform:none}
+.topbar{height:var(--topbar-h);box-shadow:none}
+.topbar h1{font-size:18px;font-weight:700}
+.panel,.stat,.company-card{border-color:var(--border);border-radius:var(--radius);box-shadow:none}
+.dashboard-hero{background:linear-gradient(135deg,var(--brand-light),#fff);border-color:var(--border);border-left:4px solid var(--brand);box-shadow:none}
+.extension-hero{background:linear-gradient(135deg,var(--brand),var(--brand-dark));border-color:var(--brand-dark);box-shadow:none}
+.button:hover{box-shadow:0 6px 16px rgba(254,27,4,.14)}
+.button.secondary{border-color:var(--border)}
+.button.secondary:hover{border-color:var(--brand);color:var(--brand)}
+.stat:after{display:none}
+.bar{background:var(--brand);box-shadow:none}
+.momentum-item,.next-action{background:var(--brand-light);border-color:var(--border)}
+.momentum-progress span{background:var(--brand)}
+.nav-brand,.brand,.nav .brand{color:var(--brand)}
+.card{border:1px solid var(--border)}
+@media(max-width:850px){.app{grid-template-columns:minmax(0,1fr)}}
+@media(min-width:1051px){.content{padding:28px;max-width:1500px;margin:0 auto}.topbar{margin:-28px -28px 22px;padding:0 28px}}

@@ -12,7 +12,7 @@ const LINKEDIN_REDIRECT_URI = `${APP_ORIGIN}/api/auth/callback`;
 const LINKEDIN_SCOPES = 'openid profile email';
 const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00';
 const SETUP_REMINDER_TYPE = 'missing_company_after_connection';
-const CURRENT_EXTENSION_VERSION = '1.2.31';
+const CURRENT_EXTENSION_VERSION = '1.2.32';
 const SETUP_REMINDER_FROM = 'NexaShare <hello@nexashare.com>';
 const DAILY_REPORT_TYPE = 'daily_repost_report';
 const REGISTRATION_NOTIFICATION_FROM = SETUP_REMINDER_FROM;
@@ -97,7 +97,7 @@ function buildRegistrationNotification(env, user) {
     from: REGISTRATION_NOTIFICATION_FROM,
     subject: `New NexaShare registration: ${name}`,
     text: `A new user registered on NexaShare.\n\nName: ${name}\nEmail: ${email}\nUser ID: ${user.id}\nTeam ID: ${user.teamId}\nRegistered at: ${registeredAt}`,
-    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:600px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:#0a66c2;color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">New NexaShare registration</div></td></tr><tr><td style="padding:26px"><table width="100%" cellspacing="0" style="border-collapse:collapse"><tr><td style="padding:9px 0;color:#667085">Name</td><td style="padding:9px 0;font-weight:700">${escapeHtml(name)}</td></tr><tr><td style="padding:9px 0;color:#667085">Email</td><td style="padding:9px 0;font-weight:700">${escapeHtml(email)}</td></tr><tr><td style="padding:9px 0;color:#667085">User ID</td><td style="padding:9px 0">${escapeHtml(user.id)}</td></tr><tr><td style="padding:9px 0;color:#667085">Team ID</td><td style="padding:9px 0">${escapeHtml(user.teamId)}</td></tr><tr><td style="padding:9px 0;color:#667085">Registered at</td><td style="padding:9px 0">${escapeHtml(registeredAt)}</td></tr></table></td></tr></table></td></tr></table></body></html>`
+    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:600px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:#FE1B04;color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">New NexaShare registration</div></td></tr><tr><td style="padding:26px"><table width="100%" cellspacing="0" style="border-collapse:collapse"><tr><td style="padding:9px 0;color:#667085">Name</td><td style="padding:9px 0;font-weight:700">${escapeHtml(name)}</td></tr><tr><td style="padding:9px 0;color:#667085">Email</td><td style="padding:9px 0;font-weight:700">${escapeHtml(email)}</td></tr><tr><td style="padding:9px 0;color:#667085">User ID</td><td style="padding:9px 0">${escapeHtml(user.id)}</td></tr><tr><td style="padding:9px 0;color:#667085">Team ID</td><td style="padding:9px 0">${escapeHtml(user.teamId)}</td></tr><tr><td style="padding:9px 0;color:#667085">Registered at</td><td style="padding:9px 0">${escapeHtml(registeredAt)}</td></tr></table></td></tr></table></td></tr></table></body></html>`
   };
 }
 
@@ -186,7 +186,7 @@ function buildDailyRepostReport(user, rows) {
     from: SETUP_REMINDER_FROM,
     subject: `NexaShare daily report: ${confirmed.length} confirmed repost${confirmed.length === 1 ? '' : 's'}`,
     text: `Hi ${firstName},\n\n${summary}\n\nReview every original post, repost link, and outcome: ${dashboardUrl}`,
-    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:680px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:#0a66c2;color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare daily report</div><div style="margin-top:7px">${escapeHtml(summary)}</div></td></tr><tr><td style="padding:26px"><p>Hi ${escapeHtml(firstName)},</p><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:10px;background:#f8fafc">Company</th><th align="left" style="padding:10px;background:#f8fafc">Outcome</th><th align="left" style="padding:10px;background:#f8fafc">Links</th></tr></thead><tbody>${itemHtml}</tbody></table><p style="text-align:center;margin:26px 0 4px"><a href="${dashboardUrl}" style="display:inline-block;background:#0a66c2;color:#fff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:9px">Review repost history</a></p><p style="font-size:12px;color:#667085">Only LinkedIn-confirmed reposts are counted as successful.</p></td></tr></table></td></tr></table></body></html>`
+    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:680px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:#FE1B04;color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare daily report</div><div style="margin-top:7px">${escapeHtml(summary)}</div></td></tr><tr><td style="padding:26px"><p>Hi ${escapeHtml(firstName)},</p><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:10px;background:#f8fafc">Company</th><th align="left" style="padding:10px;background:#f8fafc">Outcome</th><th align="left" style="padding:10px;background:#f8fafc">Links</th></tr></thead><tbody>${itemHtml}</tbody></table><p style="text-align:center;margin:26px 0 4px"><a href="${dashboardUrl}" style="display:inline-block;background:#FE1B04;color:#fff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:9px">Review repost history</a></p><p style="font-size:12px;color:#667085">Only LinkedIn-confirmed reposts are counted as successful.</p></td></tr></table></td></tr></table></body></html>`
   };
 }
 
@@ -896,7 +896,7 @@ async function handleAPI(request, env, ctx) {
     const versionParts = clientVersion.split('.').map(Number);
     if (!/^\d+\.\d+\.\d+$/.test(clientVersion) ||
         (versionParts[0] < 1 || (versionParts[0] === 1 && (versionParts[1] < 2 || (versionParts[1] === 2 && versionParts[2] < 31))))) {
-      return jsonResponse({ error: 'Update NexaShare to extension 1.2.31 or later before reposting.' }, 409);
+      return jsonResponse({ error: 'Update NexaShare to extension 1.2.32 or later before reposting.' }, 409);
     }
     const body = await request.json();
     const postUrl = String(body.postUrl || '').slice(0, 1000);

@@ -5,67 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NexaShare — LinkedIn Content Amplification</title>
   <meta name="description" content="Amplify your company LinkedIn presence with browser-based reposting and clear outcome history.">
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    :root{--blue:#0A66C2;--dark:#191919;--gray:#666;--light:#f3f6f8;--white:#fff}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--dark);line-height:1.6}
-    .container{max-width:1100px;margin:0 auto;padding:0 24px}
-    nav{background:var(--white);border-bottom:1px solid #e0e0e0;padding:16px 0;position:sticky;top:0;z-index:10}
-    nav .container{display:flex;justify-content:space-between;align-items:center}
-    .logo{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:700;color:var(--dark);text-decoration:none}
-    .logo-icon{width:36px;height:36px;background:var(--blue);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px}
-    .btn{display:inline-block;padding:10px 24px;border-radius:24px;font-weight:600;font-size:15px;text-decoration:none;cursor:pointer;border:none;transition:all .2s}
-    .btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:#004182}
-    .btn-outline{border:2px solid var(--blue);color:var(--blue);background:transparent}.btn-outline:hover{background:var(--blue);color:#fff}
-    .hero{padding:80px 0 60px;text-align:center;background:linear-gradient(180deg,var(--white) 0%,var(--light) 100%)}
-    .hero h1{font-size:48px;line-height:1.15;margin-bottom:20px;font-weight:800}
-    .hero h1 span{color:var(--blue)}
-    .hero p{font-size:20px;color:var(--gray);max-width:620px;margin:0 auto 36px}
-    .hero-cta{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
-    .features{padding:80px 0;background:var(--white)}.features h2{text-align:center;font-size:32px;margin-bottom:48px}
-    .feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:32px}
-    .feature-card{background:var(--light);border-radius:16px;padding:32px}.feature-card h3{font-size:20px;margin-bottom:8px}.feature-card p{color:var(--gray)}
-    .how{padding:80px 0;background:var(--light)}.how h2{text-align:center;font-size:32px;margin-bottom:48px}
-    .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:32px;text-align:center}
-    .step-num{width:48px;height:48px;border-radius:50%;background:var(--blue);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;margin-bottom:16px}
-    .cta-section{padding:80px 0;text-align:center;background:var(--dark);color:#fff}.cta-section h2{font-size:36px;margin-bottom:16px}.cta-section p{color:#aaa;font-size:18px;margin-bottom:32px}
-    footer{padding:32px 0;background:var(--dark);border-top:1px solid #333;color:#888;font-size:13px;text-align:center}
-    .ext-section{padding:60px 0;background:var(--white);text-align:center}.ext-section h2{font-size:28px;margin-bottom:12px}.ext-section p{color:var(--gray);margin-bottom:24px}
-    .nav-links{display:flex;gap:24px;align-items:center}
-    .nav-link{color:var(--gray);text-decoration:none}.nav-link:hover{color:var(--blue)}
-    .btn{max-width:100%;overflow-wrap:anywhere}
-    @media(max-width:768px){.hero h1{font-size:32px}}
-    /* Phones (<480px): keep the header on one line and "Get Started" fully visible.
-       Features / How It Works are hidden here; the hero's "See How It Works" button and scrolling reach them. */
-    @media(max-width:479px){
-      .container{padding:0 16px}
-      nav{padding:12px 0}
-      nav .container{gap:12px}
-      .logo{font-size:19px;gap:8px;min-width:0}
-      .logo-icon{width:32px;height:32px;font-size:16px;flex:none}
-      .nav-link{display:none}
-      .nav-cta{padding:8px 16px;font-size:14px;white-space:nowrap;flex:none}
-      .hero{padding:56px 0 44px}
-      .hero p{font-size:17px}
-    }
-  </style>
+  <link rel="stylesheet" href="/landing.css">
 
 <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
 <link rel="icon" type="image/png" sizes="32x32" href="/branding/nexashare-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/branding/nexashare-180.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#ff1c4b">
+<meta name="theme-color" content="#FE1B04">
 <meta name="apple-mobile-web-app-title" content="NexaShare">
 <link rel="stylesheet" href="/branding.css">
 </head>
 <body>
-  <nav><div class="container"><a href="/" class="logo"><img class="nexashare-mark" src="/branding/nexashare-48.png" width="36" height="36" alt="">NexaShare</a><div class="nav-links"><a href="#features" class="nav-link">Features</a><a href="#how" class="nav-link">How It Works</a><a href="/login" class="btn btn-primary nav-cta">Get Started</a></div></div></nav>
-  <section class="hero"><div class="container"><h1>Amplify your <span>LinkedIn</span> presence</h1><p>Use the NexaShare browser extension to repost configured company content through LinkedIn's visible interface and track confirmed and failed outcomes.</p><div class="hero-cta"><a href="/login.html" class="btn btn-primary">Connect with LinkedIn</a><a href="#how" class="btn btn-outline">See How It Works</a></div></div></section>
-  <section class="features" id="features"><div class="container"><h2>Why teams choose NexaShare</h2><div class="feature-grid"><div class="feature-card"><h3>Auto-Detection</h3><p>Our Chrome extension monitors your company LinkedIn page and detects new posts in real time.</p></div><div class="feature-card"><h3>One-Click Repost</h3><p>Employees approve reposts from the extension popup. Content appears on their feed within seconds.</p></div><div class="feature-card"><h3>Team Dashboard</h3><p>Track engagement, see who is amplifying, and measure the reach of every campaign from one view.</p></div></div></div></section>
-  <section class="how" id="how"><div class="container"><h2>How It Works</h2><div class="steps"><div class="step"><div class="step-num">1</div><h3>Install Extension</h3><p>Add the NexaShare Chrome extension.</p></div><div class="step"><div class="step-num">2</div><h3>Add Companies</h3><p>Enter LinkedIn company pages to monitor.</p></div><div class="step"><div class="step-num">3</div><h3>Auto-Sync</h3><p>Extension checks for new posts daily.</p></div><div class="step"><div class="step-num">4</div><h3>Amplify</h3><p>Content is reposted to employee profiles.</p></div></div></div></section>
-<section class="ext-section" id="extension"><div class="container"><h2>Private Testing Extension</h2><p>For approved local testing only. Download the ZIP, extract it, and load the folder with Chrome's Load unpacked option.</p><a href="https://github.com/gershonconsulting/nexashare/releases/download/extension-v1.2.31/nexashare-extension-1.2.31.zip" class="btn btn-primary" download="nexashare-extension-1.2.31.zip">Download nexashare-extension-1.2.31.zip</a></div></section>
-  <section class="cta-section"><div class="container"><h2>Ready to amplify?</h2><p>Connect LinkedIn, add the companies you want to follow, and let NexaShare guide the rest.</p><a href="/login.html" class="btn btn-primary">Connect with LinkedIn</a></div></section>
-  <footer><div class="container">© 2026 NexaShare. All rights reserved.</div></footer>
+<div class="landing">
+<header class="public-topbar"><a href="/" class="logo"><img class="nexashare-mark" src="/branding/nexashare-48.png" width="36" height="36" alt="">NexaShare</a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="#features">Features</a><a class="nav-link" href="#how">How it works</a><a href="/login.html" class="btn primary">Get started &rarr;</a></nav></header>
+<main>
+<section class="hero"><span class="eyebrow">LinkedIn amplification &middot; Built for teams</span><h1>Your company&rsquo;s content.<br><span class="accent">Your team&rsquo;s reach.</span></h1><p class="lede">Follow the sources that matter, share their posts through LinkedIn, and see what was actually published. One workspace for your team&rsquo;s amplification and verified outcomes.</p><div class="cta-row"><a href="/login.html" class="btn primary">Connect with LinkedIn &rarr;</a><a href="#preview" class="btn secondary">Explore the workspace</a></div><p class="hero-note">Your Chrome extension handles reposting. NexaShare tracks confirmed results.</p></section>
+<section class="product-preview" id="preview" aria-label="Illustrative NexaShare workspace"><div class="preview-caption"><span>One workspace. A clear view of your publishing.</span><span>Illustrative preview &middot; sample data</span></div><div class="preview-frame"><div class="preview-chrome" aria-hidden="true">&#9679; &#9679; &#9679;</div><div class="preview-content"><aside class="preview-sidebar" aria-hidden="true"><div class="preview-brand">NexaShare</div><div class="preview-nav active">Dashboard</div><div class="preview-nav">Reports</div><div class="preview-nav">Companies</div><div class="preview-nav">Activity</div><div class="preview-nav">Extension</div></aside><div class="preview-main"><h2 class="preview-heading">Publishing overview</h2><div class="preview-kpis"><div class="preview-kpi"><b>24</b><span>Confirmed reposts</span></div><div class="preview-kpi"><b>6</b><span>Monitored sources</span></div><div class="preview-kpi"><b>3</b><span>Active browsers</span></div></div><div class="preview-activity"><div><strong>Recent activity</strong><span>Outcome</span></div><div><span>Company update</span><span class="outcome">Confirmed on LinkedIn</span></div><div><span>Partner announcement</span><span class="outcome">Confirmed on LinkedIn</span></div><div><span>Industry insight</span><span class="outcome">Confirmed on LinkedIn</span></div></div></div></div></div></section>
+<div class="stats-strip"><div class="stat-item"><b>Sources</b><span>Companies, people &amp; hashtags</span></div><div class="stat-item"><b>Activity</b><span>Confirmed &amp; failed outcomes</span></div><div class="stat-item"><b>Reports</b><span>Publishing progress over time</span></div><div class="stat-item"><b>Health</b><span>Your extension at a glance</span></div></div>
+<section class="features-section" id="features"><div class="section-heading"><span class="eyebrow">What you get</span><h2>Bring your team&rsquo;s amplification<br>into one clear workspace.</h2><p>Know which sources you follow, what your browsers are doing, and which reposts LinkedIn confirmed.</p></div><div class="feature-grid">
+<article class="feature"><span class="feature-icon" aria-hidden="true">&#9678;</span><h3>Source monitoring</h3><p>Organize the companies, people and hashtags you want to follow, with source settings in one place.</p></article>
+<article class="feature"><span class="feature-icon" aria-hidden="true">&#8599;</span><h3>Browser-based reposting</h3><p>Your Chrome extension uses LinkedIn&rsquo;s visible repost controls while you stay signed in to LinkedIn.</p></article>
+<article class="feature"><span class="feature-icon" aria-hidden="true">&#10003;</span><h3>Verified activity</h3><p>Review confirmed, failed and skipped outcomes, with reasons and links when available.</p></article>
+<article class="feature"><span class="feature-icon" aria-hidden="true">&#9636;</span><h3>Publishing reports</h3><p>Compare publishing activity over time and review your daily and weekly progress.</p></article>
+<article class="feature"><span class="feature-icon" aria-hidden="true">&#10022;</span><h3>Content intelligence</h3><p>Explore AI-assisted ideas and insights alongside the sources and activity in your workspace.</p></article>
+<article class="feature"><span class="feature-icon" aria-hidden="true">&#9881;</span><h3>Extension health</h3><p>Check your browser connection, installed version and next setup step before running a controlled test.</p></article>
+</div></section>
+<section class="how" id="how"><div class="section-heading"><span class="eyebrow">How it works</span><h2>From your sources to verified shares.</h2></div><div class="steps"><article class="step"><span class="step-num">1</span><h3>Connect your workspace</h3><p>Sign in with LinkedIn, add your sources, and choose what NexaShare should follow.</p></article><article class="step"><span class="step-num">2</span><h3>Set up your extension</h3><p>Install the private Chrome extension and keep Chrome running and signed in to LinkedIn.</p></article><article class="step"><span class="step-num">3</span><h3>Review your outcomes</h3><p>Run a controlled test, then use activity and reports to review confirmed reposts and any failures.</p></article></div></section>
+<section class="extension-section" id="extension"><div><h2>Your NexaShare Chrome extension</h2><p>Private testing build. Download the ZIP, extract it, and load the folder with Chrome&rsquo;s Load unpacked option. The dashboard guides you through connection and updates.</p></div><a href="/nexashare-extension-1.2.32.zip" class="btn primary" download="nexashare-extension-1.2.32.zip">Download v1.2.32 &darr;</a></section>
+<section class="cta-section"><h2>Give your team&rsquo;s content a wider reach.</h2><p>Connect LinkedIn, choose your sources, and follow your publishing progress from one workspace.</p><a href="/login.html" class="btn">Connect with LinkedIn &rarr;</a></section>
+</main>
+<footer><div class="footer-grid"><div class="footer-brand"><a class="logo" href="/"><img class="nexashare-mark" src="/branding/nexashare-48.png" width="36" height="36" alt="">NexaShare</a><p>LinkedIn content amplification with browser-based reposting and a clear record of verified publishing outcomes.</p></div><div class="footer-col"><h3>Product</h3><ul><li><a href="/dashboard.html">Dashboard</a></li><li><a href="/dashboard.html#reporting">Reports</a></li><li><a href="/dashboard.html#companies">Companies</a></li><li><a href="/dashboard.html#reposts">Activity</a></li></ul></div><div class="footer-col"><h3>Get started</h3><ul><li><a href="/login.html">Connect with LinkedIn</a></li><li><a href="#how">How it works</a></li><li><a href="/dashboard.html#extension">Extension setup</a></li><li><a href="/dashboard.html#settings">Account settings</a></li></ul></div></div><div class="footer-bottom"><span>&copy; 2026 NexaShare. All rights reserved.</span><span>Part of the Gershon.ai family</span></div></footer>
+</div>
 <script>
 (async () => {
   try {
@@ -78,4 +48,3 @@
 </script>
 </body>
 </html>
-

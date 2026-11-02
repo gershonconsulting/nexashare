@@ -20,8 +20,36 @@ PNGs. The unused former SVG has been removed. Root `manifest.json` and
 `popup.html` are legacy cookie-extractor files, not the distributed extension;
 their icon references now point to the same canonical PNGs.
 
-Extension 1.2.30 updates the website expected version, download links and
+Extension releases update the website expected version, download links and
 automatic release-notice notes together. Do not commit ZIPs: the deployment
 workflow builds them from the extension folder. Existing unpacked installations
 must reload their updated folder in Chrome. No Chrome Web Store submission is
 part of this release.
+
+## Gershon red theme (extension 1.2.32)
+
+The visual reference is `https://linalysis.net/`, with tokens read directly
+from its public `common.css` on November 2, 2026:
+
+| Token | Value |
+| --- | --- |
+| Brand | `#FE1B04` |
+| Brand hover/dark | `#d11200` |
+| Brand light | `#fff5f5` |
+| Text | `#1d1d1f` |
+| Muted text | `#6e6e73` |
+| Border | `#e5e7eb` |
+| Background | `#fafafa` |
+| Card | `#ffffff` |
+
+`public/branding.css` supplies shared tokens and the member workspace structure:
+240-pixel sidebar, 64-pixel topbar, 12-pixel cards, and responsive content.
+`public/landing.css` supplies the public page layout: centered hero, clearly
+labeled sample workspace, feature cards, three setup steps, red call to action,
+and grouped footer links. NexaShare retains its own content and routes.
+
+The same brand palette is used in sign-in/onboarding/setup/admin pages, report
+headers and links, the PWA theme metadata, and the extension popup. Outcome
+colors still distinguish success, warning and failure. The canonical uploaded
+icon itself is unchanged. Extension 1.2.32 includes the preceding 1.2.31
+reliability fixes and changes the popup colors only.

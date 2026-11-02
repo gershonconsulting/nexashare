@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>All Users Progress — NexaShare</title>
 <style>
-:root{--ink:#101828;--muted:#667085;--line:#eaecf0;--bg:#faf9ff;--card:#fff;--brand:#7C3AED;--brand-soft:#f5f3ff;--ok:#067647;--ok-bg:#ecfdf3;--bad:#b42318;--bad-bg:#fef3f2;--warn:#b54708;--warn-bg:#fffaeb;--c-conf:#7C3AED;--c-fail:#e5484d;--c-skip:#cbd5e1}
+:root{--ink:#1d1d1f;--muted:#6e6e73;--line:#eaecf0;--bg:#fafafa;--card:#fff;--brand:#FE1B04;--brand-soft:#fff5f5;--ok:#067647;--ok-bg:#ecfdf3;--bad:#b42318;--bad-bg:#fef3f2;--warn:#b54708;--warn-bg:#fffaeb;--c-conf:#FE1B04;--c-fail:#e5484d;--c-skip:#cbd5e1}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
 header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 28px;background:#fff;border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px}.mark{width:32px;height:32px;border-radius:9px;background:var(--brand);color:#fff;display:grid;place-items:center}
@@ -19,13 +19,13 @@ h1{font-size:24px;margin:0 0 4px}.sub{color:var(--muted);font-size:14px;margin:0
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:18px}
 .card h2{font-size:16px;margin:0 0 4px}.legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin:6px 0 10px;flex-wrap:wrap}.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 .chart{width:100%;height:auto;display:block}.chart text{font-size:11px;fill:var(--muted)}
-.tip{position:fixed;pointer-events:none;background:#101828;color:#fff;font-size:12px;padding:8px 10px;border-radius:8px;display:none;z-index:9;line-height:1.5;white-space:nowrap}
+.tip{position:fixed;pointer-events:none;background:#1d1d1f;color:#fff;font-size:12px;padding:8px 10px;border-radius:8px;display:none;z-index:9;line-height:1.5;white-space:nowrap}
 table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;padding:10px 8px;border-bottom:1px solid var(--line);white-space:nowrap}td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
-tr.u{cursor:pointer}tr.u:hover td{background:#fcfbff}td.num{text-align:right;font-variant-numeric:tabular-nums}th.num{text-align:right}
+tr.u{cursor:pointer}tr.u:hover td{background:#fff5f5}td.num{text-align:right;font-variant-numeric:tabular-nums}th.num{text-align:right}
 .who b{display:block}.who span{color:var(--muted);font-size:12px}
 .pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}.pill.healthy{background:var(--ok-bg);color:var(--ok)}.pill.stalled{background:var(--bad-bg);color:var(--bad)}.pill.no_results{background:#f2f4f7;color:var(--muted)}
 .ver.old{color:var(--warn);font-weight:600}
-tr.detail td{background:#fcfbff;padding:14px 18px}
+tr.detail td{background:#fff5f5;padding:14px 18px}
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px}.filters input{border:1px solid var(--line);border-radius:9px;padding:8px 11px;font:inherit;font-size:14px;min-width:220px}
 .msg{padding:40px;text-align:center;color:var(--muted)}.msg.err{color:var(--bad)}
 .scroll{overflow-x:auto}
@@ -36,7 +36,7 @@ tr.detail td{background:#fcfbff;padding:14px 18px}
 <link rel="icon" type="image/png" sizes="32x32" href="/branding/nexashare-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/branding/nexashare-180.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#ff1c4b">
+<meta name="theme-color" content="#FE1B04">
 <meta name="apple-mobile-web-app-title" content="NexaShare">
 <link rel="stylesheet" href="/branding.css">
 </head>
@@ -89,7 +89,7 @@ function barChart(series, { h = 220, cumulative = false } = {}) {
     const cmax = Math.max(1, series[n - 1].cumulative_confirmed);
     const cy = v => padT + (h - padT - padB) * (1 - v / cmax);
     const pts = series.map((d, i) => `${padL + i * step + step / 2},${cy(d.cumulative_confirmed)}`).join(' ');
-    g += `<polyline points="${pts}" fill="none" stroke="#101828" stroke-width="2" stroke-linejoin="round"/>`;
+    g += `<polyline points="${pts}" fill="none" stroke="#1d1d1f" stroke-width="2" stroke-linejoin="round"/>`;
     g += `<text x="${W - padR + 6}" y="${cy(cmax) + 4}">${cmax}</text>`;
   }
   return `<svg class="chart" viewBox="0 0 ${W} ${h}" preserveAspectRatio="none" style="height:${h}px">${g}</svg>`;
@@ -127,7 +127,7 @@ function render() {
     <div class="tile"><div class="k">Last confirmed repost</div><div class="v" style="font-size:22px">${fmtWhen(p.last_confirmed_at)}</div><div class="d">${p.last_confirmed_at ? esc(p.last_confirmed_at) : 'none on record'}</div></div>
   </div>
   <div class="card"><h2>Platform results per day</h2>
-    <div class="legend"><span><i style="background:var(--c-conf)"></i>Confirmed</span><span><i style="background:var(--c-fail)"></i>Failed</span><span><i style="background:var(--c-skip)"></i>Skipped</span><span><i style="background:#101828;height:2px;vertical-align:3px"></i>Cumulative confirmed</span></div>
+    <div class="legend"><span><i style="background:var(--c-conf)"></i>Confirmed</span><span><i style="background:var(--c-fail)"></i>Failed</span><span><i style="background:var(--c-skip)"></i>Skipped</span><span><i style="background:#1d1d1f;height:2px;vertical-align:3px"></i>Cumulative confirmed</span></div>
     <div id="pchart">${barChart(p.series, { cumulative: true })}</div></div>
   <div class="card"><h2>Progress by user</h2><p class="sub" style="margin-bottom:10px">Healthy = a confirmed repost in the last ${data.stall_after_days} days. Click a row for that user's daily chart.</p>
     <div class="filters"><input id="q" placeholder="Search name, email or team" value="${esc(query)}"></div>
