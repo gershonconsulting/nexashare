@@ -241,3 +241,4 @@ for (const [control, direct, quote] of [
   }
 }
 console.log('linkedin post-card and five-locale fixture checks passed');
+export { Element, loadPage, extractFunction };

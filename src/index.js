@@ -1,3 +1,4 @@
+import { thoughtsMode, isThoughtsPilot, generateRepostThoughts, armThoughtsSubmission, recordThoughtsOutcome } from './repost-thoughts.js';
 import { collectWorkspaceInsights } from './workspace-insights.js';
 import { ACCESS_MODE, SUCCESS_TARGET_PERCENT } from './access-policy.js';
 import { collectPerformance } from './performance.js';
@@ -13,7 +14,7 @@ const LINKEDIN_REDIRECT_URI = `${APP_ORIGIN}/api/auth/callback`;
 const LINKEDIN_SCOPES = 'openid profile email';
 const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/5kQdRb1rc6mvfcZ8yvcfK00';
 const SETUP_REMINDER_TYPE = 'missing_company_after_connection';
-const CURRENT_EXTENSION_VERSION = '1.2.32';
+const CURRENT_EXTENSION_VERSION = '1.2.33';
 const SETUP_REMINDER_FROM = 'NexaShare <hello@nexashare.com>';
 const DAILY_REPORT_TYPE = 'daily_repost_report';
 const REGISTRATION_NOTIFICATION_FROM = SETUP_REMINDER_FROM;
@@ -473,6 +474,31 @@ async function handleAPI(request, env, ctx) {
     }
   }
 
+  if (['/api/repost-thoughts','/api/extension/repost-thoughts','/api/extension/repost-thoughts/submit'].includes(url.pathname)) {
+    const extension = url.pathname.startsWith('/api/extension/');
+    const user = extension ? await getExtensionUser(request, env) : await getUser(request, env);
+    if (!user) return jsonResponse({ error: 'Not authenticated' }, 401);
+    try {
+      const mode = await thoughtsMode(env.DB, user);
+      if (request.method === 'GET') {
+        const history = mode.eligible && !extension ? (await env.DB.prepare('SELECT id,original_post_url,source_name,thoughts,status,generated_at,confirmed_at,repost_url,detail FROM repost_thoughts WHERE user_id=? ORDER BY generated_at DESC,id DESC LIMIT 30').bind(user.id).all()).results || [] : [];
+        return jsonResponse({ ...mode, history });
+      }
+      if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
+      if (!extension && request.headers.get('Origin') !== APP_ORIGIN) return jsonResponse({ error: 'Invalid request origin' }, 403);
+      if (!mode.eligible) return jsonResponse({ error: 'Pilot unavailable' }, 403);
+      const body = await request.json().catch(() => null);
+      if (!extension) {
+        if (typeof body?.enabled !== 'boolean') return jsonResponse({ error: 'Choose an enabled state' }, 400);
+        await env.DB.prepare("INSERT INTO repost_thought_settings(user_id,enabled) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET enabled=excluded.enabled,updated_at=datetime('now')").bind(user.id,body.enabled?1:0).run();
+        return jsonResponse(await thoughtsMode(env.DB,user));
+      }
+      if (url.pathname.endsWith('/submit') && (!Number.isSafeInteger(Number(body?.id)) || Number(body?.id)<=0)) return jsonResponse({error:'Invalid thoughts ID'},400);
+      const result = url.pathname.endsWith('/submit') ? await armThoughtsSubmission(env.DB,user,Number(body?.id)) : await generateRepostThoughts(env,user,body);
+      return jsonResponse(result,result.status||200);
+    } catch (error) { console.error('Repost thoughts failed',{message:error?.message});return jsonResponse({error:'Automatic thoughts are temporarily unavailable'},503); }
+  }
+
   // Limited pilot: AI comment drafts, no automated LinkedIn submission.
   if (url.pathname === '/api/ai-comment-draft') {
     if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
@@ -806,6 +832,7 @@ async function handleAPI(request, env, ctx) {
         String(outcome.diagnostic?.discoveryReason || '').slice(0, 150),
         Math.max(0, Math.min(10, Number(outcome.diagnostic?.recoveryAttempt) || 0))
       ).run();
+      await recordThoughtsOutcome(env.DB, user, { ...outcome, status, postUrl });
       if (!inserted.meta?.changes) continue;
       await recordDeliveryOutcome(env.DB, {
         teamId: user.team_id,
@@ -898,8 +925,9 @@ async function handleAPI(request, env, ctx) {
     const versionParts = clientVersion.split('.').map(Number);
     if (!/^\d+\.\d+\.\d+$/.test(clientVersion) ||
         (versionParts[0] < 1 || (versionParts[0] === 1 && (versionParts[1] < 2 || (versionParts[1] === 2 && versionParts[2] < 31))))) {
-      return jsonResponse({ error: 'Update NexaShare to extension 1.2.32 or later before reposting.' }, 409);
+      return jsonResponse({ error: 'Update NexaShare to extension 1.2.33 or later before reposting.' }, 409);
     }
+    if (isThoughtsPilot(user) && (await thoughtsMode(env.DB,user)).enabled && versionParts[0]===1 && versionParts[1]===2 && versionParts[2]<33) return jsonResponse({error:'Update to extension 1.2.33 for automatic Repost with your thoughts'},409);
     const body = await request.json();
     const postUrl = String(body.postUrl || '').slice(0, 1000);
     if (!postUrl.startsWith('https://www.linkedin.com/')) return jsonResponse({ error: 'A LinkedIn post URL is required' }, 400);

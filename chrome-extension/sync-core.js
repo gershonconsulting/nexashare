@@ -26,7 +26,7 @@ async function log(level, message, data) {
 
 chrome.runtime.onInstalled.addListener(() => {
   ensureDailyAlarm();
-  chrome.action.setBadgeBackgroundColor({ color: '#0A66C2' });
+  chrome.action.setBadgeBackgroundColor({ color: '#FE1B04' });
   log('info', 'Extension installed; automatic daily check enabled');
 });
 
@@ -119,6 +119,7 @@ async function authenticatedFetch(path, options = {}) {
     ...options,
     headers: { ...(options.headers || {}), Authorization: `Bearer ${stored.apiToken}`, 'X-NexaShare-Extension-Version': EXTENSION_VERSION }
   });
+  if (!response.ok && path.startsWith('/api/extension/repost-thoughts')) {const problem=await response.json().catch(()=>({}));throw new Error(problem.error||`Automatic thoughts returned HTTP ${response.status}`);}
   if (!response.ok) throw new Error(response.status === 409
     ? 'Update the NexaShare extension from the dashboard before reposting.'
     : `NexaShare API returned HTTP ${response.status}. Reconnect the extension from the dashboard.`);
@@ -144,11 +145,14 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
   setBadge('â€¦', '#6b7280');
 
   let companies;
+  let thoughtsMode;
   try {
-    const [companyData, peopleData] = await Promise.all([
+    const [companyData, peopleData, mode] = await Promise.all([
       authenticatedFetch('/api/companies'),
-      authenticatedFetch('/api/people')
+      authenticatedFetch('/api/people'),
+      authenticatedFetch('/api/extension/repost-thoughts')
     ]);
+    thoughtsMode = mode;
     companies = [
       ...(companyData.companies || []).map(item => ({ ...item, sourceType: 'company' })),
       ...(peopleData.people || []).map(item => ({ ...item, sourceType: 'person' }))
@@ -252,10 +256,16 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
           }
           await chrome.storage.local.set({ syncProgress: { runId: activeRunId, state: 'running', stage: `Attempting repost for ${company.name || company.vanity || 'source'}`, source: company.name || company.vanity || '', trigger, ts: new Date().toISOString() } });
           await log('info', 'repost:attempt', { company: company.name || company.vanity, postUrl: post.url });
-          const result = await repostContent(post);
+          let result;
+          if (thoughtsMode?.enabled) {
+            let draft;
+            try{draft=await authenticatedFetch('/api/extension/repost-thoughts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({postUrl:deliveryPostUrl(post),postText:post.text||'',sourceName:company.name||'',authorName:post.authorName||company.name||''})});}
+            catch(error){result={confirmed:false,thoughtsSubmitted:false,detail:'Automatic thoughts unavailable before publishing. '+String(error)};}
+            if(draft)result=await repostContentWithThoughts(post,draft);
+          } else result=await repostContent(post);
           await log(result.confirmed ? 'info' : 'error', result.confirmed ? 'repost:confirmed' : 'repost:failed', { company: company.name || company.vanity, detail: result.detail, repostUrl: result.repostUrl || null });
           const alreadyReposted = /post was already reposted/i.test(result.detail || '');
-          outcomes.push(outcomeFor( post, result.confirmed ? 'confirmed' : alreadyReposted ? 'already_reposted' : 'failed', result.detail, result.repostUrl));
+          outcomes.push({ ...outcomeFor( post, result.confirmed ? 'confirmed' : alreadyReposted ? 'already_reposted' : 'failed', result.detail, result.repostUrl), ...(result.thoughtsId?{thoughtsId:result.thoughtsId,thoughtsText:result.thoughtsText,thoughtsSubmitted:result.thoughtsSubmitted,thoughtsConfirmed:result.thoughtsConfirmed}: {}) });
           if (result.confirmed || alreadyReposted) {
             rememberPost(seen, post.id);
             processedPostIds[sourceKey] = [...seen].slice(-500);
@@ -1248,3 +1258,95 @@ function sleep(milliseconds) {
 }
 
 
+// Account-gated quote repost path. Plain repost functions above remain unchanged.
+async function openThoughtsComposer(thoughts, postId, matchText, marker) {
+  const visible=node=>{const b=node?.getBoundingClientRect?.();return !!b&&b.width>0&&b.height>0&&getComputedStyle(node).display!=='none'&&getComputedStyle(node).visibility!=='hidden'};
+  const norm=value=>String(value||'').replace(/\s+/g,' ').trim();
+  const labels=node=>[node.getAttribute('aria-label')||'',node.textContent||''].map(norm);
+  const quote=value=>/repost with (?:your|my) thoughts|with your thoughts|avec (?:un commentaire|vos réflexions|mes réflexions)|ajouter (?:vos|mes) réflexions|mit (?:kommentar|.*gedanken)|con (?:tus|mis) (?:ideas|opiniones|reflexiones)|con (?:un commento|i tuoi pensieri)/i.test(value);
+  const undo=value=>/undo repost|remove repost|annuler la republication|repost rückgängig|deshacer republicación|annulla ripubblicazione/i.test(value);
+  const controls=[...document.querySelectorAll('button,[role="button"]')].filter(visible).filter(node=>!labels(node).some(quote)&&(/repost|reshare/.test(node.getAttribute('data-view-name')||'')||labels(node).some(v=>/^(?:repost|reshare|republier|reposter|reposten|erneut teilen|volver a publicar|ripubblica|ricondividi)(?:\s|$)/i.test(v))));
+  const wanted=norm(matchText).toLowerCase().slice(0,120);
+  const matching=controls.filter(button=>{
+    let node=button;
+    for(let depth=0;depth<14&&node;depth++,node=node.parentElement){
+      const urn=(node.getAttribute?.('data-urn')||'')+' '+(node.getAttribute?.('data-id')||'');
+      if(postId && /^\d+$/.test(postId) && urn.includes(postId))return true;
+      const text=norm(node.innerText||node.textContent).toLowerCase();
+      if(wanted && text.length<12000 && text.includes(wanted) && [...node.querySelectorAll('button,[role="button"]')].filter(c=>controls.includes(c)).length===1)return true;
+    }
+    return !wanted && !postId && controls.length===1;
+  });
+  // A permalink can expose no activity-id attribute; one visible Repost control is unambiguous.
+  const button=matching.length===1?matching[0]:(!wanted&&controls.length===1?controls[0]:null);
+  if(!button)return {ready:false,detail:'Could not identify exactly one matching post for Repost with your thoughts.'};
+  if(button.getAttribute('aria-pressed')==='true'||labels(button).some(undo))return {ready:false,alreadyReposted:true,detail:'Post was already reposted.'};
+  button.scrollIntoView({block:'center'});button.click();
+  let action;
+  for(let i=0;i<12&&!action;i++){await new Promise(resolve=>setTimeout(resolve,250));const matches=[...document.querySelectorAll('[role="menuitem"],[role="option"],button,[role="button"]')].filter(visible).filter(n=>n!==button&&labels(n).some(quote));if(matches.length===1)action=matches[0];}
+  if(!action)return {ready:false,detail:'LinkedIn did not expose an unambiguous Repost with your thoughts option; no plain repost was used.'};
+  action.click();
+  let editor,root;
+  for(let i=0;i<16&&!editor;i++){
+    await new Promise(resolve=>setTimeout(resolve,250));
+    const pairs=[...document.querySelectorAll('.ql-editor[contenteditable="true"],[contenteditable="true"][role="textbox"]')].filter(visible).map(e=>({editor:e,root:e.closest('[role="dialog"],.share-box-v2__modal,.share-box-v2__dialog')})).filter(pair=>pair.root&&visible(pair.root));
+    if(pairs.length===1){editor=pairs[0].editor;root=pairs[0].root;}
+  }
+  if(!editor)return {ready:false,detail:'The repost composer was not found; nothing was submitted.'};
+  if(norm(editor.innerText||editor.textContent)&&norm(editor.innerText||editor.textContent)!==norm(thoughts))return {ready:false,detail:'The composer already contains different text; nothing was overwritten or submitted.'};
+  editor.focus();
+  if(document.activeElement!==editor&&!editor.contains(document.activeElement))return {ready:false,detail:'The repost editor could not be focused.'};
+  if(norm(editor.innerText||editor.textContent)!==norm(thoughts)){
+    let inserted=false;try{inserted=document.execCommand('insertText',false,thoughts)}catch{}
+    if(!inserted||norm(editor.innerText||editor.textContent)!==norm(thoughts)){editor.textContent=thoughts;editor.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:thoughts}));}
+  }
+  await new Promise(resolve=>setTimeout(resolve,250));
+  if(norm(editor.innerText||editor.textContent)!==norm(thoughts))return {ready:false,detail:'The agreed thoughts text was not retained by LinkedIn; nothing was submitted.'};
+  root.setAttribute('data-nexashare-thoughts',marker);
+  return {ready:true,textVerified:true};
+}
+
+async function submitThoughtsComposer(thoughts, marker) {
+  const visible=node=>{const b=node?.getBoundingClientRect?.();return !!b&&b.width>0&&b.height>0&&getComputedStyle(node).display!=='none'&&getComputedStyle(node).visibility!=='hidden'};
+  const norm=value=>String(value||'').replace(/\s+/g,' ').trim();
+  const roots=[...document.querySelectorAll('[data-nexashare-thoughts]')].filter(n=>n.getAttribute('data-nexashare-thoughts')===marker&&visible(n));
+  if(roots.length!==1)return {confirmed:false,thoughtsSubmitted:false,detail:'The prepared repost composer is unavailable; nothing was submitted.'};
+  const root=roots[0],editors=[...root.querySelectorAll('.ql-editor[contenteditable="true"],[contenteditable="true"][role="textbox"]')].filter(visible);
+  if(editors.length!==1||norm(editors[0].innerText||editors[0].textContent)!==norm(thoughts))return {confirmed:false,thoughtsSubmitted:false,detail:'Composer text changed before submission; nothing was submitted.'};
+  let submit;
+  for(let i=0;i<10&&!submit;i++){
+    const buttons=[...root.querySelectorAll('button,[role="button"]')].filter(visible).filter(b=>!b.disabled&&b.getAttribute('aria-disabled')!=='true').filter(b=>b.classList.contains('share-actions__primary-action')||/^(?:Post|Publier|Posten|Veröffentlichen|Publicar|Pubblica)$/i.test(norm(b.textContent)||norm(b.getAttribute('aria-label'))));
+    if(buttons.length===1)submit=buttons[0];else await new Promise(resolve=>setTimeout(resolve,200));
+  }
+  if(!submit)return {confirmed:false,thoughtsSubmitted:false,detail:'The prepared composer has no enabled, unambiguous Post button.'};
+  const notices=()=>[...document.querySelectorAll('[role="alert"],.artdeco-toast-item')].filter(visible);
+  const before=new Set(notices().map(n=>norm(n.innerText||n.textContent)));
+  submit.click();
+  for(let i=0;i<30;i++){
+    await new Promise(resolve=>setTimeout(resolve,400));
+    const notice=notices().find(n=>{const text=norm(n.innerText||n.textContent);return !before.has(text)&&/post(?:ed| successful)|your post.*(?:shared|published)|publication.*(?:réuss|publiée)|beitrag.*(?:veröffentlicht|geteilt)|publicaci[oó]n.*(?:publicada|compartida)|post.*pubblicato/i.test(text)&&!/could not|not posted|failed|error|échec|impossible|nicht|no se pudo/i.test(text)});
+    if(notice&&!visible(root)){
+      const link=[...notice.querySelectorAll('a[href]')].find(a=>/^https:\/\/www\.linkedin\.com\/(?:feed\/update\/|posts\/)/.test(a.href));
+      return {confirmed:true,thoughtsSubmitted:true,thoughtsConfirmed:true,repostUrl:link?.href||'',detail:'LinkedIn confirmed Repost with your thoughts after the exact generated text was submitted.'};
+    }
+  }
+  return {confirmed:false,thoughtsSubmitted:true,thoughtsConfirmed:false,detail:'LinkedIn did not provide visible confirmation after Repost with your thoughts. Do not retry until the profile is reviewed.'};
+}
+
+async function repostContentWithThoughts(post,draft) {
+  let outcome={confirmed:false,thoughtsSubmitted:false,detail:'No repost was submitted.'};
+  try{
+    outcome=await withBackgroundTab(post.url,async tabId=>{
+      const readiness=await waitForLinkedInPosts(tabId);
+      if(!readiness.ready)return {confirmed:false,thoughtsSubmitted:false,detail:discoveryFailureDetail(readiness.reason)};
+      const marker=crypto.randomUUID();
+      const prepared=(await chrome.scripting.executeScript({target:{tabId},func:openThoughtsComposer,args:[draft.thoughts,String(post.id||''),post.inPlace?post.matchText||'':'',marker]}))?.[0]?.result;
+      if(!prepared?.ready)return {confirmed:false,thoughtsSubmitted:false,detail:prepared?.detail||'The thoughts composer did not become ready.'};
+      // Persist the one-time submit intent before clicking LinkedIn Post.
+      await authenticatedFetch('/api/extension/repost-thoughts/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:draft.id})});
+      try{return (await chrome.scripting.executeScript({target:{tabId},func:submitThoughtsComposer,args:[draft.thoughts,marker]}))?.[0]?.result||{confirmed:false,thoughtsSubmitted:true,detail:'LinkedIn did not return an outcome after thoughts submission.'};}
+      catch(error){return {confirmed:false,thoughtsSubmitted:true,detail:'LinkedIn did not return an outcome after thoughts submission. '+String(error)};}
+    });
+  }catch(error){outcome={confirmed:false,thoughtsSubmitted:false,detail:'Thoughts repost stopped before submission. '+String(error)};}
+  return {...outcome,thoughtsId:draft.id,thoughtsText:draft.thoughts};
+}

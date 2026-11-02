@@ -70,6 +70,8 @@ jobs:
 
       - name: Run extension release notice checks
         run: |
+          node tests/repost-thoughts.test.mjs
+          node tests/repost-thoughts-dom.test.mjs
           node tests/release-notice.test.mjs
           node tests/release-routing.test.mjs
 

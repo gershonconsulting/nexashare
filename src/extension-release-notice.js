@@ -12,6 +12,10 @@ export const RELEASE_NOTICE_FROM = 'GC NexaShare <nexashare@gershon.ai>';
 
 // Plain-language notes per version. Optional: versions without notes still announce.
 export const RELEASE_NOTES = {
+  '1.2.33': [
+    'Olivier-only automatic Repost with your thoughts: short contextual text, account toggle and exact-text publishing history.',
+    'Uncertain submissions are held rather than retried; other accounts retain plain reposting.'
+  ],
   '1.2.32': [
     'NexaShare now uses the Gershon red theme, matching the Linalysis palette across the workspace, public pages, reports and Chrome extension popup.'
   ],
