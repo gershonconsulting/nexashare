@@ -96,5 +96,6 @@
   });
   $('printReport').addEventListener('click',()=>window.print());
   $('copyReferral').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('referralLink').value);$('referralMessage').textContent='Referral link copied.';}catch{$('referralLink').select();$('referralMessage').textContent='Select and copy your referral link.';}});
+  window.addEventListener?.('hashchange',()=>{const route=location.hash.slice(1)||'dashboard';if(typeof selectView==='function')selectView(route);return loaders[route]?.();});
   loaders[location.hash.slice(1)]?.();
 })();
