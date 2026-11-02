@@ -48,6 +48,8 @@ jobs:
           node tests/daily-report.test.mjs
           node tests/growth.test.mjs
           node tests/performance.test.mjs
+          node tests/workspace-insights.test.mjs
+          node tests/workspace-browser.test.mjs
           node tests/content-guards.mjs
           node tests/daily-report-switch.test.mjs
 

@@ -12,7 +12,7 @@ sqlite.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT, 
   CREATE TABLE teams (id INTEGER PRIMARY KEY, name TEXT);
   CREATE TABLE sessions (token_hash TEXT, user_id INTEGER, revoked_at TEXT, expires_at TEXT);
   CREATE TABLE oauth_states (state_hash TEXT, team_name TEXT, expires_at TEXT, used_at TEXT);
-  CREATE TABLE reposts (id INTEGER PRIMARY KEY, user_id INTEGER, team_id INTEGER, company_name TEXT, status TEXT, attempted_at TEXT, confirmed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, post_text TEXT, hashtags TEXT, original_post_url TEXT, repost_url TEXT);
+  CREATE TABLE reposts (id INTEGER PRIMARY KEY, user_id INTEGER, team_id INTEGER, company_name TEXT, status TEXT, attempted_at TEXT, confirmed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, post_text TEXT, hashtags TEXT, original_post_url TEXT, repost_url TEXT, detail TEXT, discovery_reason TEXT);
   CREATE TABLE extension_runs (user_id INTEGER, created_at TEXT);`);
 sqlite.exec(readFileSync(new URL('../migrations/0013_growth_intelligence.sql', import.meta.url), 'utf8'));
 const db = {
