@@ -4,6 +4,8 @@ Written by: Claude (Anthropic) - token-limit handoff protocol
 Date: 2026-09-09
 ================================================================
 
+2026-11-02 OK  POST https://nexashare.com/api/matrix-stats (src/matrix-stats.js via src/entry.js) aligned to the Client Platform Matrix contract: exact email match on users.email, ok = has account, note = "N reposts 30d" from delivery_jobs published in last 30d, else "no account". Read-only, hash-checked secret.
+
 ================================================================
 2026-10-23 nightly  -  phone header fix (PR nightly/2026-10-23-nexashare-phone-header)
 ================================================================
