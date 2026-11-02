@@ -240,6 +240,16 @@ async function sendDailyUserReports(env) {
   return { sent, failed, eligible: (users.results || []).length };
 }
 
+export function dailyReportJobs(env, sendUsers = sendDailyUserReports, sendAdmin = sendAdminDailyReport) {
+  const users = Promise.resolve().then(() => sendUsers(env)).catch(error => {
+    console.error('Daily user report batch failed', { message: error?.message });
+    return { sent: 0, failed: 1, error: 'user_report_batch_failed' };
+  });
+  // The admin digest queries daily_reports. Read it only after user sends and
+  // their audit writes settle, including failure paths.
+  return [users, users.then(() => sendAdmin(env))];
+}
+
 export default {
   fetch(request, env, ctx) {
     // Platform-admin view of every user's results (see src/admin-progress.js).
@@ -257,8 +267,7 @@ export default {
     })];
     if (!event?.cron || event.cron === DAILY_REPORT_CRON) {
       jobs.push(
-        sendDailyUserReports(env),
-        sendAdminDailyReport(env),
+        ...dailyReportJobs(env),
         sendSundayReports(env, CURRENT_EXTENSION_VERSION, { date: scheduledDate })
       );
     }
