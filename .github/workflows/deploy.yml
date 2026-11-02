@@ -67,7 +67,9 @@ jobs:
         run: node tests/repost-diagnostics.test.mjs
 
       - name: Run extension release notice checks
-        run: node tests/release-notice.test.mjs
+        run: |
+          node tests/release-notice.test.mjs
+          node tests/release-routing.test.mjs
 
       - name: Validate JavaScript and Chrome manifest
         run: |
