@@ -4,6 +4,33 @@ Written by: Claude (Anthropic) - token-limit handoff protocol
 Date: 2026-09-09
 ================================================================
 
+================================================================
+2026-11-07 nightly  -  repost-with-thoughts matcher fix (PR nightly/2026-11-07-nexashare-matcher)
+================================================================
+✅  chrome-extension/sync-core.js openThoughtsComposer: Repost
+    controls and the "Repost with your thoughts" menu option are now
+    counted once when LinkedIn nests a role="button"/menuitem wrapper
+    around the real <button> (innermost node kept). This is the likely
+    cause of 51x "Could not identify exactly one matching post" and
+    14x "unambiguous ... option" for olivier@attia.com since 1.2.33.
+    Plain repost path (every other account) is untouched.
+✅  tests/repost-thoughts-dom.test.mjs: 5 new fixtures (wrapped Repost,
+    wrapped Repost + text match, wrapped menu option, two wrapped posts
+    with id, two posts without id stay ambiguous). Both halves of the
+    fix proven to fail without it. All 21 workflow test scripts +
+    admin-progress.test.mjs pass (Node 22).
+❌  NOT released. Version left at 1.2.33 on purpose - Ariel bumps at
+    release (1.2.34: manifest, src/worker.js + src/index.js
+    CURRENT_EXTENSION_VERSION, THOUGHTS_MIN_VERSION if wanted,
+    dashboard/setup/index links, release notice, worker-smoke). That
+    bump e-mails every client and shows the red banner - intended for a
+    real extension release only.
+❌  Not verified against live LinkedIn markup (fixture only). First
+    run after 1.2.34 on Olivier's browser should be one controlled test.
+❌  Until released: no-code workaround = dashboard -> Activity ->
+    "Automatic Repost with your thoughts" OFF for Olivier (plain
+    reposts were 82.8% on 11-02). Re-sign LinkedIn in that browser.
+
 2026-11-02 OK  POST https://nexashare.com/api/matrix-stats (src/matrix-stats.js via src/entry.js) aligned to the Client Platform Matrix contract: exact email match on users.email, ok = has account, note = "N reposts 30d" from delivery_jobs published in last 30d, else "no account". Read-only, hash-checked secret.
 
 ================================================================
