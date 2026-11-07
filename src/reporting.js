@@ -64,9 +64,58 @@ export async function collectDailySeries(db, userId, days = 30, date = new Date(
       from, to: daily.filter(row => !row.partial).at(-1)?.day || null, excludes_today: includeToday } };
 }
 
-export async function collectDaySummary(db, userId, offset) {
-  const counts = normalizeCounts(await db.prepare(`SELECT ${COUNTS} FROM reposts
-    WHERE user_id = ? AND date(COALESCE(attempted_at, created_at)) = date('now', ?)`).bind(userId, offset).first() || {});
+// ---- One date basis for every daily e-mail (admin digest and per-user reports) ----
+// Both e-mails count the same America/New_York calendar day, so their numbers agree.
+// The cron fires at 06:00 UTC (01:00/02:00 ET), when the previous ET day is complete.
+export const REPORT_TIME_ZONE = 'America/New_York';
+export const REPORT_SOURCE = 'NexaShare reposts table (extension-reported outcomes; confirmed = LinkedIn acknowledged)';
+
+function zoneOffsetMs(date, timeZone) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }).formatToParts(date).map(part => [part.type, part.value]));
+  const asUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour % 24, +parts.minute, +parts.second);
+  return asUtc - Math.floor(date.getTime() / 1000) * 1000;
+}
+
+function zonedMidnight(year, month, day, timeZone) {
+  const wall = Date.UTC(year, month - 1, day);
+  let guess = wall;
+  for (let i = 0; i < 3; i++) guess = wall - zoneOffsetMs(new Date(guess), timeZone);
+  return new Date(guess);
+}
+
+export function zonedDayKey(date, timeZone = REPORT_TIME_ZONE) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+const sqlTime = date => date.toISOString().slice(0, 19).replace('T', ' ');
+
+// The ET calendar day `daysBack` days before `now` (1 = yesterday), as half-open UTC
+// bounds [from, to) usable in SQL: datetime(x) >= datetime(from) AND datetime(x) < datetime(to).
+export function reportDayWindow(now = new Date(), daysBack = 1, timeZone = REPORT_TIME_ZONE) {
+  const [y, m, d] = zonedDayKey(now, timeZone).split('-').map(Number);
+  const startDay = new Date(Date.UTC(y, m - 1, d - daysBack));
+  const endDay = new Date(Date.UTC(y, m - 1, d - daysBack + 1));
+  const start = zonedMidnight(startDay.getUTCFullYear(), startDay.getUTCMonth() + 1, startDay.getUTCDate(), timeZone);
+  const end = zonedMidnight(endDay.getUTCFullYear(), endDay.getUTCMonth() + 1, endDay.getUTCDate(), timeZone);
+  return { day: startDay.toISOString().slice(0, 10), timeZone, label: 'ET', from: sqlTime(start), to: sqlTime(end) };
+}
+
+export function dateBasisFooter(window, source = REPORT_SOURCE, generatedAt = new Date()) {
+  return `Counts for ${window.day} ET · source ${source} · generated ${sqlTime(generatedAt)} UTC`;
+}
+
+// `period` is a reportDayWindow (preferred) or a legacy SQLite date offset such as '-1 day'.
+export async function collectDaySummary(db, userId, period) {
+  const row = typeof period === 'object' && period
+    ? await db.prepare(`SELECT ${COUNTS} FROM reposts
+        WHERE user_id = ? AND datetime(COALESCE(attempted_at, created_at)) >= datetime(?)
+          AND datetime(COALESCE(attempted_at, created_at)) < datetime(?)`).bind(userId, period.from, period.to).first()
+    : await db.prepare(`SELECT ${COUNTS} FROM reposts
+        WHERE user_id = ? AND date(COALESCE(attempted_at, created_at)) = date('now', ?)`).bind(userId, period).first();
+  const counts = normalizeCounts(row || {});
   return { ...counts, skipped: counts.skipped + counts.already_reposted, rate: counts.success_rate };
 }
 
