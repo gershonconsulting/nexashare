@@ -1,10 +1,11 @@
 import { performanceNarrative, ENGAGEMENT_LIMITATION } from './performance.js';
-import { rateLabel } from './reporting.js';
+import { dateBasisFooter, rateLabel, reportDayWindow } from './reporting.js';
 // Daily operations report for the NexaShare Chrome extension.
 //
 // This is a platform feature, not an external job: the Worker cron collects the
-// last 24 hours of extension activity across every team and emails a single
-// digest to the Gershon Consulting reporting inbox.
+// previous America/New_York calendar day of extension activity across every team
+// and emails a single digest to the Gershon Consulting reporting inbox. The
+// per-user reports (src/worker.js) count the same ET day, so the numbers agree.
 //
 // Subject convention (Gershon platform reports):
 //   "NexaShare Extension Report — September 3, 2026"
@@ -73,7 +74,14 @@ function countsByStatus(rows) {
   return counts;
 }
 
-export async function collectAdminReportData(db) {
+const IN_DAY = "datetime(COALESCE(attempted_at, created_at)) >= datetime(?) AND datetime(COALESCE(attempted_at, created_at)) < datetime(?)";
+const IN_DAY_R = "datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime(?) AND datetime(COALESCE(r.attempted_at, r.created_at)) < datetime(?)";
+
+export async function collectAdminReportData(db, options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date();
+  const basis = options.basis || reportDayWindow(now, 1);
+  const previousBasis = options.previousBasis || reportDayWindow(now, 2);
+  const day = [basis.from, basis.to];
   const all = async (sql, ...binds) => safe(async () => {
     const statement = binds.length ? db.prepare(sql).bind(...binds) : db.prepare(sql);
     const result = await statement.all();
@@ -104,44 +112,43 @@ export async function collectAdminReportData(db) {
     userReports
   ] = await Promise.all([
     all(`SELECT status, COUNT(*) AS count FROM reposts
-         WHERE datetime(COALESCE(attempted_at, created_at)) >= datetime('now', '-1 day')
-         GROUP BY status`),
+         WHERE ${IN_DAY}
+         GROUP BY status`, ...day),
     all(`SELECT status, COUNT(*) AS count FROM reposts
-         WHERE datetime(COALESCE(attempted_at, created_at)) >= datetime('now', '-2 day')
-           AND datetime(COALESCE(attempted_at, created_at)) < datetime('now', '-1 day')
-         GROUP BY status`),
+         WHERE ${IN_DAY}
+         GROUP BY status`, previousBasis.from, previousBasis.to),
     all(`SELECT status, COUNT(*) AS count FROM reposts
          WHERE datetime(COALESCE(attempted_at, created_at)) >= datetime('now', '-7 day')
          GROUP BY status`),
     first(`SELECT COUNT(DISTINCT user_id) AS active_users, COUNT(DISTINCT team_id) AS active_teams
            FROM reposts
-           WHERE datetime(COALESCE(attempted_at, created_at)) >= datetime('now', '-1 day')`),
+           WHERE ${IN_DAY}`, ...day),
     all(`SELECT COALESCE(NULLIF(trim(detail), ''), 'No reason reported by the extension') AS reason,
                 COUNT(*) AS count
          FROM reposts
          WHERE status = 'failed'
-           AND datetime(COALESCE(attempted_at, created_at)) >= datetime('now', '-1 day')
-         GROUP BY reason ORDER BY count DESC LIMIT 8`),
+           AND ${IN_DAY}
+         GROUP BY reason ORDER BY count DESC LIMIT 8`, ...day),
     all(`SELECT COALESCE(NULLIF(trim(company_name), ''), 'Unnamed source') AS source,
                 SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
                 COUNT(*) AS attempts
          FROM reposts
-         WHERE datetime(COALESCE(attempted_at, created_at)) >= datetime('now', '-1 day')
-         GROUP BY source ORDER BY attempts DESC LIMIT 10`),
+         WHERE ${IN_DAY}
+         GROUP BY source ORDER BY attempts DESC LIMIT 10`, ...day),
     all(`SELECT COALESCE(NULLIF(trim(t.name), ''), 'Team ' || r.team_id) AS team,
                 SUM(CASE WHEN r.status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
                 SUM(CASE WHEN r.status = 'failed' THEN 1 ELSE 0 END) AS failed,
                 COUNT(*) AS attempts
          FROM reposts r LEFT JOIN teams t ON t.id = r.team_id
-         WHERE datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime('now', '-1 day')
-         GROUP BY r.team_id ORDER BY attempts DESC LIMIT 10`),
+         WHERE ${IN_DAY_R}
+         GROUP BY r.team_id ORDER BY attempts DESC LIMIT 10`, ...day),
     all(`SELECT r.company_name, r.original_post_url, r.repost_url, r.status, r.detail,
                 COALESCE(r.attempted_at, r.created_at) AS happened_at,
                 u.name AS user_name, u.email AS user_email
          FROM reposts r LEFT JOIN users u ON u.id = r.user_id
-         WHERE datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime('now', '-1 day')
-         ORDER BY datetime(COALESCE(r.attempted_at, r.created_at)) DESC LIMIT 25`),
+         WHERE ${IN_DAY_R}
+         ORDER BY datetime(COALESCE(r.attempted_at, r.created_at)) DESC LIMIT 25`, ...day),
     first(`SELECT COUNT(*) AS total,
                   SUM(CASE WHEN datetime(created_at) >= datetime('now', '-1 day') THEN 1 ELSE 0 END) AS new_today,
                   SUM(CASE WHEN datetime(created_at) >= datetime('now', '-7 day') THEN 1 ELSE 0 END) AS new_this_week
@@ -175,16 +182,17 @@ export async function collectAdminReportData(db) {
 
   const userComparisons = await all(`SELECT u.id, u.name, u.email,
     (SELECT extension_version FROM extension_tokens WHERE user_id = u.id AND revoked_at IS NULL ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1) AS extension_version,
-    SUM(CASE WHEN r.status = 'confirmed' AND datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime('now', '-1 day') THEN 1 ELSE 0 END) AS confirmed,
-    SUM(CASE WHEN r.status = 'failed' AND datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime('now', '-1 day') THEN 1 ELSE 0 END) AS failed,
-    SUM(CASE WHEN r.status = 'confirmed' AND datetime(COALESCE(r.attempted_at, r.created_at)) < datetime('now', '-1 day') THEN 1 ELSE 0 END) AS previous_confirmed
+    SUM(CASE WHEN r.status = 'confirmed' AND datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime(?) THEN 1 ELSE 0 END) AS confirmed,
+    SUM(CASE WHEN r.status = 'failed' AND datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime(?) THEN 1 ELSE 0 END) AS failed,
+    SUM(CASE WHEN r.status = 'confirmed' AND datetime(COALESCE(r.attempted_at, r.created_at)) < datetime(?) THEN 1 ELSE 0 END) AS previous_confirmed
     FROM users u LEFT JOIN reposts r ON r.user_id = u.id
-      AND datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime('now', '-2 day')
-      AND datetime(COALESCE(r.attempted_at, r.created_at)) <= datetime('now')
-    GROUP BY u.id ORDER BY confirmed DESC, failed DESC, u.id LIMIT 1000`);
+      AND datetime(COALESCE(r.attempted_at, r.created_at)) >= datetime(?)
+      AND datetime(COALESCE(r.attempted_at, r.created_at)) < datetime(?)
+    GROUP BY u.id ORDER BY confirmed DESC, failed DESC, u.id LIMIT 1000`, basis.from, basis.from, basis.from, previousBasis.from, basis.to);
   return {
+    basis,
     userComparisons,
-    generatedAt: new Date().toISOString(),
+    generatedAt: now.toISOString(),
     today: countsByStatus(todayRows),
     yesterday: countsByStatus(yesterdayRows),
     week: countsByStatus(weekRows),
@@ -233,12 +241,15 @@ function successRate(counts) {
 export function buildAdminReportEmail(data, options = {}) {
   const date = options.date instanceof Date ? options.date : new Date();
   const to = options.to || ADMIN_REPORT_TO;
-  const dateLabel = formatReportDate(date);
+  // Label the digest with the ET day it counts (same as the per-user reports).
+  const basis = options.date instanceof Date ? reportDayWindow(options.date, 1) : (data.basis || reportDayWindow(date, 1));
+  const dateLabel = `${formatReportDate(new Date(`${basis.day}T12:00:00Z`))} ET`;
+  const footer = dateBasisFooter(basis, undefined, data.generatedAt ? new Date(data.generatedAt) : date);
   const today = data.today;
   const rate = successRate(today);
   const headline = today.total
     ? `${today.confirmed} confirmed, ${today.failed} failed, ${today.skipped + today.already_reposted} skipped across ${data.activeUsers} active extension${data.activeUsers === 1 ? '' : 's'}.`
-    : 'No extension activity was recorded in the last 24 hours.';
+    : 'No extension activity was recorded on the reporting day (ET).';
 
   const metrics = [
     ['Confirmed reposts', today.confirmed, delta(today.confirmed, data.yesterday.confirmed)],
@@ -256,7 +267,7 @@ export function buildAdminReportEmail(data, options = {}) {
 
   const alerts = [];
   if (!today.total) {
-    alerts.push('No repost outcome reached the API in the last 24 hours — check that the extension is installed, signed in and running.');
+    alerts.push('No repost outcome reached the API on the reporting day (ET) — check that the extension is installed, signed in and running.');
   }
   if (today.failed && rate !== null && rate < 70) {
     alerts.push(`Success rate is ${rate}% — failures are above the normal range.`);
@@ -275,7 +286,7 @@ export function buildAdminReportEmail(data, options = {}) {
 
   const alertsHtml = alerts.length
     ? `<div style="margin:0 0 22px;padding:16px 18px;background:#fff6ed;border:1px solid #fed7aa;border-radius:12px"><div style="font-weight:800;color:#9a3412;margin-bottom:8px">Needs attention</div><ul style="margin:0;padding-left:18px;color:#7c2d12;line-height:1.65">${alerts.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>`
-    : '<div style="margin:0 0 22px;padding:16px 18px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;color:#166534;font-weight:700">Nothing needs attention — the extension ran clean in the last 24 hours.</div>';
+    : '<div style="margin:0 0 22px;padding:16px 18px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;color:#166534;font-weight:700">Nothing needs attention — the extension ran clean on the reporting day (ET).</div>';
 
   const listTable = (title, rows, columns) => {
     if (!rows.length) return '';
@@ -288,7 +299,7 @@ export function buildAdminReportEmail(data, options = {}) {
     { label: 'Reason', render: row => escapeHtml(row.reason) },
     { label: 'Count', align: 'right', render: row => escapeHtml(row.count) }
   ]);
-  const userComparisonHtml = listTable('User publishing comparison · last 24h vs previous 24h (up to 1,000 users)', data.userComparisons || [], [
+  const userComparisonHtml = listTable('User publishing comparison · reporting day vs the day before, ET (up to 1,000 users)', data.userComparisons || [], [
     { label: 'User', render: row => escapeHtml(row.name || row.email) },
     { label: 'Extension', render: row => escapeHtml(row.extension_version || 'Not detected') },
     { label: 'Success', render: row => escapeHtml(rateLabel(row.confirmed, row.failed)) },
@@ -361,14 +372,16 @@ export function buildAdminReportEmail(data, options = {}) {
     textLines.push('Most active sources:', ...data.topSources.map(row => `- ${row.source}: ${row.confirmed} confirmed / ${row.failed} failed of ${row.attempts}`), '');
   }
   textLines.push(`Dashboard: ${APP_ORIGIN}/dashboard.html#reposts`);
-  textLines.push('User publishing comparison · last 24h vs previous 24h (up to 1,000 users)', ...(data.userComparisons || []).map(row => `${row.name || row.email}: extension ${row.extension_version || 'not detected'}; ${rateLabel(row.confirmed, row.failed)}; ${performanceNarrative(row, {confirmed: Number(row.previous_confirmed || 0)})}`));
+  textLines.push('User publishing comparison · reporting day vs the day before, ET (up to 1,000 users)', ...(data.userComparisons || []).map(row => `${row.name || row.email}: extension ${row.extension_version || 'not detected'}; ${rateLabel(row.confirmed, row.failed)}; ${performanceNarrative(row, {confirmed: Number(row.previous_confirmed || 0)})}`));
+
+  textLines.push('', footer);
 
   return {
     to,
     from: ADMIN_REPORT_FROM,
     subject: `NexaShare Extension Report — ${dateLabel} · ${rateLabel(today.confirmed, today.failed)} · ${today.confirmed} confirmed, ${today.failed} failed`,
     text: textLines.join('\n'),
-    html: `<!doctype html><html lang="en" dir="ltr"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>NexaShare report</title></head><body lang="en" dir="ltr" style="margin:0;background:#ffffff;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#12211d"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:30px 14px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border:1px solid #dfe5e2;border-radius:12px;overflow:hidden"><tr><td style="background:#ffffff;padding:28px 28px 18px;border-bottom:2px solid #1f6f5c;color:#12211d"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#12211d">Daily extension report</div><div style="font-size:26px;font-weight:800;margin-top:6px;color:#12211d">NexaShare — ${escapeHtml(dateLabel)}</div><div style="margin-top:10px;font-size:15px;color:#12211d">${escapeHtml(headline)}</div></td></tr><tr><td style="padding:26px">${alertsHtml}<h2 style="font-size:18px">Publishing growth and next steps</h2><p>${escapeHtml(performanceNarrative(today, data.yesterday))}</p><p style="font-size:13px;color:#475467">${escapeHtml(ENGAGEMENT_LIMITATION)}</p><table width="100%" cellspacing="0" style="border-collapse:collapse;font-size:14px">${metricRowsHtml}</table>${userComparisonHtml}${failuresHtml}${diagnosticsHtml}${sourcesHtml}${teamsHtml}${deliveryHtml}${recentHtml}<p style="text-align:center;margin:30px 0 6px"><a href="${APP_ORIGIN}/dashboard.html#reposts" style="display:inline-block;background:#ffffff;color:#1f6f5c;text-decoration:underline;font-weight:700;padding:12px 22px;border:2px solid #1f6f5c;border-radius:9px">Open the NexaShare dashboard</a></p><p style="font-size:12px;color:#8194a6;text-align:center;margin:14px 0 0">Covers the 24 hours before ${escapeHtml(data.generatedAt)}. A repost counts as confirmed only after LinkedIn acknowledges it. Sent automatically by the NexaShare Worker.</p></td></tr></table></td></tr></table></body></html>`
+    html: `<!doctype html><html lang="en" dir="ltr"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>NexaShare report</title></head><body lang="en" dir="ltr" style="margin:0;background:#ffffff;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#12211d"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:30px 14px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border:1px solid #dfe5e2;border-radius:12px;overflow:hidden"><tr><td style="background:#ffffff;padding:28px 28px 18px;border-bottom:2px solid #1f6f5c;color:#12211d"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#12211d">Daily extension report</div><div style="font-size:26px;font-weight:800;margin-top:6px;color:#12211d">NexaShare — ${escapeHtml(dateLabel)}</div><div style="margin-top:10px;font-size:15px;color:#12211d">${escapeHtml(headline)}</div></td></tr><tr><td style="padding:26px">${alertsHtml}<h2 style="font-size:18px">Publishing growth and next steps</h2><p>${escapeHtml(performanceNarrative(today, data.yesterday))}</p><p style="font-size:13px;color:#475467">${escapeHtml(ENGAGEMENT_LIMITATION)}</p><table width="100%" cellspacing="0" style="border-collapse:collapse;font-size:14px">${metricRowsHtml}</table>${userComparisonHtml}${failuresHtml}${diagnosticsHtml}${sourcesHtml}${teamsHtml}${deliveryHtml}${recentHtml}<p style="text-align:center;margin:30px 0 6px"><a href="${APP_ORIGIN}/dashboard.html#reposts" style="display:inline-block;background:#ffffff;color:#1f6f5c;text-decoration:underline;font-weight:700;padding:12px 22px;border:2px solid #1f6f5c;border-radius:9px">Open the NexaShare dashboard</a></p><p style="font-size:12px;color:#8194a6;text-align:center;margin:14px 0 0">${escapeHtml(footer)}. A repost counts as confirmed only after LinkedIn acknowledges it. Sent automatically by the NexaShare Worker.</p></td></tr></table></td></tr></table></body></html>`
   };
 }
 
