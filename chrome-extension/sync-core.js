@@ -12,7 +12,7 @@ const RETRY_ALARM = 'retryRepost';
 const COMMAND_ALARM = 'serverCommands';
 const RETRY_DELAYS_MINUTES = [5, 20, 60];
 const SOURCE_DISCOVERY_ATTEMPTS = 3;
-const REPOST_ATTEMPTS = 4;
+const REPOST_ATTEMPTS = 2;
 const MAX_POST_AGE_DAYS = 30;
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 let activeSyncPromise = null;
@@ -1119,7 +1119,7 @@ async function captureDiagnostic(tabId, traceId, stage, metadata = {}) {
       func: () => ({
         url: location.href,
         title: document.title,
-        visibleText: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 4000),
+        // Do not collect the page body: it may contain private LinkedIn information.
         controls: [...document.querySelectorAll('button, [role="button"], [role="menuitem"], [role="status"], [role="alert"]')]
           .filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
           .slice(0, 80)
