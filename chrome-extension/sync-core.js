@@ -1265,7 +1265,9 @@ async function openThoughtsComposer(thoughts, postId, matchText, marker) {
   const labels=node=>[node.getAttribute('aria-label')||'',node.textContent||''].map(norm);
   const quote=value=>/repost with (?:your|my) thoughts|with your thoughts|avec (?:un commentaire|vos réflexions|mes réflexions)|ajouter (?:vos|mes) réflexions|mit (?:kommentar|.*gedanken)|con (?:tus|mis) (?:ideas|opiniones|reflexiones)|con (?:un commento|i tuoi pensieri)/i.test(value);
   const undo=value=>/undo repost|remove repost|annuler la republication|repost rückgängig|deshacer republicación|annulla ripubblicazione/i.test(value);
-  const controls=[...document.querySelectorAll('button,[role="button"]')].filter(visible).filter(node=>!labels(node).some(quote)&&(/repost|reshare/.test(node.getAttribute('data-view-name')||'')||labels(node).some(v=>/^(?:repost|reshare|republier|reposter|reposten|erneut teilen|volver a publicar|ripubblica|ricondividi)(?:\s|$)/i.test(v))));
+  // LinkedIn can wrap the real <button> in a role="button" element; count each nested pair once (keep the innermost, clickable node).
+  const innermost=list=>list.filter(node=>!list.some(other=>other!==node&&node.contains?.(other)));
+  const controls=innermost([...document.querySelectorAll('button,[role="button"]')].filter(visible).filter(node=>!labels(node).some(quote)&&(/repost|reshare/.test(node.getAttribute('data-view-name')||'')||labels(node).some(v=>/^(?:repost|reshare|republier|reposter|reposten|erneut teilen|volver a publicar|ripubblica|ricondividi)(?:\s|$)/i.test(v)))));
   const wanted=norm(matchText).toLowerCase().slice(0,120);
   const matching=controls.filter(button=>{
     let node=button;
@@ -1283,7 +1285,7 @@ async function openThoughtsComposer(thoughts, postId, matchText, marker) {
   if(button.getAttribute('aria-pressed')==='true'||labels(button).some(undo))return {ready:false,alreadyReposted:true,detail:'Post was already reposted.'};
   button.scrollIntoView({block:'center'});button.click();
   let action;
-  for(let i=0;i<12&&!action;i++){await new Promise(resolve=>setTimeout(resolve,250));const matches=[...document.querySelectorAll('[role="menuitem"],[role="option"],button,[role="button"]')].filter(visible).filter(n=>n!==button&&labels(n).some(quote));if(matches.length===1)action=matches[0];}
+  for(let i=0;i<12&&!action;i++){await new Promise(resolve=>setTimeout(resolve,250));const matches=innermost([...document.querySelectorAll('[role="menuitem"],[role="option"],button,[role="button"]')].filter(visible).filter(n=>n!==button&&!n.contains?.(button)&&!button.contains?.(n)&&labels(n).some(quote)));if(matches.length===1)action=matches[0];}
   if(!action)return {ready:false,detail:'LinkedIn did not expose an unambiguous Repost with your thoughts option; no plain repost was used.'};
   action.click();
   let editor,root;
