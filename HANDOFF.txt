@@ -34,6 +34,34 @@ Date: 2026-09-09
 2026-11-02 OK  POST https://nexashare.com/api/matrix-stats (src/matrix-stats.js via src/entry.js) aligned to the Client Platform Matrix contract: exact email match on users.email, ok = has account, note = "N reposts 30d" from delivery_jobs published in last 30d, else "no account". Read-only, hash-checked secret.
 
 ================================================================
+2026-11-07 nightly  -  one date basis for daily e-mails (PR nightly/2026-11-07-nexashare-report-basis)
+================================================================
+OK  Admin digest ("NexaShare Extension Report") and the per-user daily
+    reports now count the SAME day: the previous America/New_York
+    calendar day (DST-safe; the 06:00 UTC cron runs after it closes).
+    Before: admin = rolling 24h before 06:00 UTC, labelled with the SEND
+    date; per-user = UTC calendar day. So 11-06 admin said "4 confirmed"
+    while Olivier's e-mail said 0 (the 4 were Amos/Dmitri/Vincent/Charles,
+    who get no per-user e-mail; plus the window shift).
+    Shared helper: reportDayWindow() / dateBasisFooter() in src/reporting.js.
+    Both e-mails end with "Counts for <YYYY-MM-DD> ET · source NexaShare
+    reposts table (...) · generated <time> UTC". Admin subject now names
+    the counted ET day ("November 5, 2026 ET"), not the send date.
+    Still rolling 24h (labelled so): new registrations, connected
+    installs, delivery-engine table. Dashboard day-by-day tables stay UTC.
+    Tests: tests/admin-report.test.mjs (ET boundaries, DST, admin sum =
+    per-user sum, footer). All 21 CI test scripts pass.
+NO  Version NOT bumped (same rule as 2026-10-23): no extension change in
+    this PR, and bumping CURRENT_EXTENSION_VERSION e-mails every client a
+    release notice and turns on the red update banner.
+!!  Failure collapse 11-05 (0% / 79 failed) = Olivier's account only, and
+    only since extension 1.2.33 (commit 5ee8998, 11-02) switched his
+    account to automatic "Repost with your thoughts". See the PR body for
+    the diagnosis and the proposed 1.2.34 matcher fix (nested Repost
+    controls counted twice). Quick restore: switch "Automatic Repost with
+    your thoughts" OFF in Activity -> plain reposts (82.8% on 11-02).
+
+================================================================
 2026-10-23 nightly  -  phone header fix (PR nightly/2026-10-23-nexashare-phone-header)
 ================================================================
 OK  Homepage header (public/index.html) on phones under 480px: the

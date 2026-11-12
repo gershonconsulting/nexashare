@@ -1,5 +1,5 @@
 import { performanceNarrative, ENGAGEMENT_LIMITATION } from './performance.js';
-import { collectDaySummary, rateLabel } from './reporting.js';
+import { collectDaySummary, dateBasisFooter, rateLabel, reportDayWindow } from './reporting.js';
 import app from './index.js';
 import { sendAdminDailyReport } from './admin-report.js';
 import { sendSundayReports } from './weekly-report.js';
@@ -69,7 +69,7 @@ export function buildDailyReport(user, rows, previousRows, signals = {}) {
   const neverSeen = !installedVersion;
 
   const summary = ranYesterday
-    ? `${today.confirmed} successful repost${today.confirmed === 1 ? '' : 's'}, ${today.failed} failure${today.failed === 1 ? '' : 's'}, and ${today.skipped} skipped/already reposted on the reporting day (UTC).`
+    ? `${today.confirmed} successful repost${today.confirmed === 1 ? '' : 's'}, ${today.failed} failure${today.failed === 1 ? '' : 's'}, and ${today.skipped} skipped/already reposted on the reporting day (ET).`
     : 'No extension activity was recorded yesterday. Check the computer running your automation.';
 
   const performanceSummary = performanceNarrative(today, before);
@@ -108,7 +108,7 @@ export function buildDailyReport(user, rows, previousRows, signals = {}) {
         const links = `<a href="${escapeHtml(row.original_post_url)}">Original</a>${row.repost_url ? ` &middot; <a href="${escapeHtml(row.repost_url)}">Repost</a>` : ''}`;
         return `<tr><td style="padding:11px;border-bottom:1px solid #e5e7eb;vertical-align:top">${escapeHtml(row.company_name || 'LinkedIn source')}</td><td style="padding:11px;border-bottom:1px solid #e5e7eb;vertical-align:top;font-weight:700;color:${isFailure ? '#b42318' : '#344054'}">${escapeHtml(outcome)}${detail}</td><td style="padding:11px;border-bottom:1px solid #e5e7eb;vertical-align:top">${links}</td></tr>`;
       }).join('')
-    : `<tr><td colspan="3" style="padding:18px;color:#667085">${ranYesterday ? 'No repost outcomes were recorded on the reporting day (UTC). NexaShare is still monitoring your configured sources.' : 'No outcomes, because the job did not run. See the alarm above.'}</td></tr>`;
+    : `<tr><td colspan="3" style="padding:18px;color:#667085">${ranYesterday ? 'No repost outcomes were recorded on the reporting day (ET). NexaShare is still monitoring your configured sources.' : 'No outcomes, because the job did not run. See the alarm above.'}</td></tr>`;
 
   // ---- plain text ----------------------------------------------------------
   const textAlarm = ranYesterday ? '' : 'ALARM: THE DAILY JOB DID NOT RUN YESTERDAY. Nothing was checked and nothing was reposted.\n\n';
@@ -122,18 +122,20 @@ export function buildDailyReport(user, rows, previousRows, signals = {}) {
         const repost = row.repost_url ? `\nRepost: ${row.repost_url}` : '';
         return `${source}: ${normalizeStatus(row.status)}${detail}\nOriginal: ${row.original_post_url}${repost}`;
       }).join('\n\n')
-    : 'No repost outcomes were recorded on the reporting day (UTC).';
+    : 'No repost outcomes were recorded on the reporting day (ET).';
 
   const subjectPrefix = ranYesterday ? '' : 'ACTION NEEDED — no run recorded · ';
-  const reportDate = signals.reportDate || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const basis = signals.basis || reportDayWindow(signals.now || new Date(), 1);
+  const reportDate = signals.reportDate || basis.day;
+  const footer = dateBasisFooter({ ...basis, day: reportDate }, undefined, signals.now || new Date());
   const status = !ranYesterday || (!today.confirmed && today.failed) ? 'Red' : today.failed || outdated || neverSeen ? 'Orange' : today.confirmed ? 'Green' : 'Quiet day';
 
   return {
     to: user.email,
     from: DAILY_REPORT_FROM,
-    subject: `${subjectPrefix}NexaShare daily report · ${reportDate} UTC · ${rateLabel(today.confirmed, today.failed)} · ${today.confirmed} successful, ${today.failed} failed`,
-    text: `Status: ${status} | Reporting date: ${reportDate} (UTC)\nSuccess: ${rateLabel(today.confirmed, today.failed)}\n\nHi ${firstName},\n\n${textAlarm}${textOutdated}${summary}\n\n${performanceSummary}\n\n${ENGAGEMENT_LIMITATION}\n\n${textProgress}${textRows}\n\nReview your latest 100 outcomes: ${dashboardUrl}\n\nTo stop this daily email, turn it off in Settings > Email reports: https://nexashare.com/dashboard.html#settings`,
-    html: `<!doctype html><html lang="en" dir="ltr"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>NexaShare report</title></head><body lang="en" dir="ltr" style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" lang="en" dir="ltr" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:720px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:${ranYesterday ? '#FE1B04' : '#b42318'};color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare daily activity report</div><div style="margin-top:7px">${escapeHtml(summary)}</div><div style="margin-top:10px;font-weight:700">${escapeHtml(status)} · ${reportDate} UTC · ${escapeHtml(rateLabel(today.confirmed, today.failed))}</div></td></tr>${banners.join('')}<tr><td style="padding:20px 26px"><h2 style="font-size:18px">Your publishing progress</h2><p>${escapeHtml(performanceSummary)}</p><p style="font-size:13px;color:#475467">${escapeHtml(ENGAGEMENT_LIMITATION)}</p></td></tr>${progressTable}<tr><td style="padding:0 26px 26px"><p style="font-size:16px">Hi ${escapeHtml(firstName)},</p><p style="font-size:13px;color:#475467">Latest 100 outcomes for the reporting day are shown below; totals include every outcome.</p><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:10px;background:#f8fafc">Source</th><th align="left" style="padding:10px;background:#f8fafc">Outcome / reason</th><th align="left" style="padding:10px;background:#f8fafc">Links</th></tr></thead><tbody>${itemHtml}</tbody></table><p style="text-align:center;margin:26px 0 4px"><a href="${dashboardUrl}" style="display:inline-block;background:#FE1B04;color:#fff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:9px">Review repost history</a></p><p style="font-size:12px;color:#667085">Don't want this daily email? Turn it off any time in <a href="https://nexashare.com/dashboard.html#settings" style="color:#FE1B04">Settings &rarr; Email reports</a>.</p><p style="font-size:12px;color:#667085">A repost is counted as successful only after LinkedIn confirmation. Failure reasons are shown when the extension reported one. Confirmation rate is measured against attempts, so skipped and already-reposted items are excluded from it.</p></td></tr></table></td></tr></table></body></html>`
+    subject: `${subjectPrefix}NexaShare daily report · ${reportDate} ET · ${rateLabel(today.confirmed, today.failed)} · ${today.confirmed} successful, ${today.failed} failed`,
+    text: `Status: ${status} | Reporting date: ${reportDate} (ET)\nSuccess: ${rateLabel(today.confirmed, today.failed)}\n\nHi ${firstName},\n\n${textAlarm}${textOutdated}${summary}\n\n${performanceSummary}\n\n${ENGAGEMENT_LIMITATION}\n\n${textProgress}${textRows}\n\nReview your latest 100 outcomes: ${dashboardUrl}\n\nTo stop this daily email, turn it off in Settings > Email reports: https://nexashare.com/dashboard.html#settings\n\n${footer}`,
+    html: `<!doctype html><html lang="en" dir="ltr"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>NexaShare report</title></head><body lang="en" dir="ltr" style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" lang="en" dir="ltr" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:720px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:${ranYesterday ? '#FE1B04' : '#b42318'};color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare daily activity report</div><div style="margin-top:7px">${escapeHtml(summary)}</div><div style="margin-top:10px;font-weight:700">${escapeHtml(status)} · ${reportDate} ET · ${escapeHtml(rateLabel(today.confirmed, today.failed))}</div></td></tr>${banners.join('')}<tr><td style="padding:20px 26px"><h2 style="font-size:18px">Your publishing progress</h2><p>${escapeHtml(performanceSummary)}</p><p style="font-size:13px;color:#475467">${escapeHtml(ENGAGEMENT_LIMITATION)}</p></td></tr>${progressTable}<tr><td style="padding:0 26px 26px"><p style="font-size:16px">Hi ${escapeHtml(firstName)},</p><p style="font-size:13px;color:#475467">Latest 100 outcomes for the reporting day are shown below; totals include every outcome.</p><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:10px;background:#f8fafc">Source</th><th align="left" style="padding:10px;background:#f8fafc">Outcome / reason</th><th align="left" style="padding:10px;background:#f8fafc">Links</th></tr></thead><tbody>${itemHtml}</tbody></table><p style="text-align:center;margin:26px 0 4px"><a href="${dashboardUrl}" style="display:inline-block;background:#FE1B04;color:#fff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:9px">Review repost history</a></p><p style="font-size:12px;color:#667085">Don't want this daily email? Turn it off any time in <a href="https://nexashare.com/dashboard.html#settings" style="color:#FE1B04">Settings &rarr; Email reports</a>.</p><p style="font-size:12px;color:#667085">A repost is counted as successful only after LinkedIn confirmation. Failure reasons are shown when the extension reported one. Confirmation rate is measured against attempts, so skipped and already-reposted items are excluded from it.</p><p style="font-size:12px;color:#667085">${escapeHtml(footer)}</p></td></tr></table></td></tr></table></body></html>`
   };
 }
 
@@ -186,25 +188,32 @@ async function sendDailyUserReports(env) {
   let sent = 0;
   let failed = 0;
 
+  // Same America/New_York day as the admin digest (src/admin-report.js), so the
+  // numbers in the two e-mails agree.
+  const now = new Date();
+  const basis = reportDayWindow(now, 1);
+  const previousWindow = reportDayWindow(now, 2);
+
   for (const user of users.results || []) {
-    const dayRows = async offset => (await env.DB.prepare(
+    const dayRows = async period => (await env.DB.prepare(
       `SELECT company_name, original_post_url, repost_url, post_text, status, detail, attempted_at
        FROM reposts
        WHERE user_id = ?
-         AND date(COALESCE(attempted_at, created_at)) = date('now', ?)
+         AND datetime(COALESCE(attempted_at, created_at)) >= datetime(?)
+         AND datetime(COALESCE(attempted_at, created_at)) < datetime(?)
        ORDER BY datetime(COALESCE(attempted_at, created_at)) DESC
        LIMIT 100`
-    ).bind(user.id, offset).all()).results || [];
+    ).bind(user.id, period.from, period.to).all()).results || [];
 
-    const outcomes = await dayRows('-1 day');
-    const previous = await dayRows('-2 day');
+    const outcomes = await dayRows(basis);
+    const previous = await dayRows(previousWindow);
 
     // Did the extension actually run yesterday? Without this, a silent failure
     // is indistinguishable from a genuinely quiet day.
     const run = await env.DB.prepare(
       `SELECT COUNT(*) AS runs FROM extension_runs
-       WHERE user_id = ? AND date(created_at) = date('now', '-1 day')`
-    ).bind(user.id).first().catch(() => null);
+       WHERE user_id = ? AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`
+    ).bind(user.id, basis.from, basis.to).first().catch(() => null);
 
     const token = await env.DB.prepare(
       `SELECT extension_version, last_seen_at FROM extension_tokens
@@ -216,8 +225,10 @@ async function sendDailyUserReports(env) {
       ranYesterday: Number(run?.runs || 0) > 0,
       extensionVersion: token?.extension_version || null,
       lastSeenAt: token?.last_seen_at || null,
-      todaySummary: await collectDaySummary(env.DB, user.id, '-1 day'),
-      previousSummary: await collectDaySummary(env.DB, user.id, '-2 day')
+      todaySummary: await collectDaySummary(env.DB, user.id, basis),
+      previousSummary: await collectDaySummary(env.DB, user.id, previousWindow),
+      basis,
+      now
     };
 
     try {
