@@ -90,7 +90,7 @@ assert.equal(noKey.skipped, 'resend_not_configured');
 
 // Wiring: the Worker checks on every cron and keeps reports on the daily fire only.
 const wrangler = await readFile(new URL('../wrangler.toml', import.meta.url), 'utf8');
-assert.match(wrangler, /crons = \["0 6 \* \* \*", "\*\/30 \* \* \* \*"\]/);
+assert.match(wrangler, /crons = \["0 6 \* \* \*", "0 \* \* \* \*", "\*\/30 \* \* \* \*"\]/);
 assert.equal(DAILY_REPORT_CRON, '0 6 * * *');
 const worker = await readFile(new URL('../src/worker.js', import.meta.url), 'utf8');
 assert.match(worker, /sendExtensionReleaseNotice\(env, CURRENT_EXTENSION_VERSION\)/);
@@ -155,3 +155,4 @@ assert.equal(mails.length, sentCount, 'announced once per version');
 assert.deepEqual(await checkWatchedExtensions({ DB: watchDb(new Map()) }, watched), [], 'no key: no network, nothing to do');
 
 console.log('release-notice tests passed');
+
