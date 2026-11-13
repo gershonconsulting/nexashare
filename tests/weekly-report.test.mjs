@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
-import { buildWeeklyAdminEmail, buildWeeklyUserEmail, isSunday, sendSundayReports, weeklyHealth, weekKey } from '../src/weekly-report.js';
+import { buildWeeklyAdminEmail, buildWeeklyUserEmail, isSunday, isWeeklyReportTime, sendSundayReports, weeklyHealth, weekKey } from '../src/weekly-report.js';
 
 const current = '1.2.18';
 assert.equal(isSunday(new Date('2026-09-13T06:00:00Z')), true);
 assert.equal(isSunday(new Date('2026-09-14T06:00:00Z')), false);
+assert.equal(isWeeklyReportTime(new Date('2026-01-11T13:00:00Z')), true, '08:00 EST');
+assert.equal(isWeeklyReportTime(new Date('2026-07-12T12:00:00Z')), true, '08:00 EDT');
+assert.equal(isWeeklyReportTime(new Date('2026-07-12T11:00:00Z')), false);
 assert.equal(weekKey(new Date('2026-09-13T06:00:00Z')), '2026-09-06_2026-09-13');
 
 assert.equal(weeklyHealth({ extensionVersion: current, runDays: 7, confirmed: 3, failed: 0 }, current).code, 'green');
@@ -65,15 +68,20 @@ const db = {
         throw new Error(`Unexpected all query: ${sql}`);
       },
       async first() {
+        if (sql.includes('FROM admin_weekly_reports')) return null;
         if (sql.includes('SUM(CASE')) return activity;
         if (sql.includes('COUNT(DISTINCT')) return { days: 7 };
         if (sql.includes('FROM extension_tokens')) return { extension_version: current, last_seen_at: activity.lastSeenAt };
         throw new Error(`Unexpected first query: ${sql}`);
+      },
+      async run() {
+        if (sql.includes('admin_weekly_reports')) return { success: true };
+        throw new Error(`Unexpected run query: ${sql}`);
       }
     };
   }
 };
-const sundayResult = await sendSundayReports({ DB: db, RESEND_API_KEY: 'test' }, current, { date: new Date('2026-09-13T06:00:00Z') });
+const sundayResult = await sendSundayReports({ DB: db, RESEND_API_KEY: 'test' }, current, { date: new Date('2026-09-13T12:00:00Z') });
 assert.deepEqual(sundayResult, { userReportsSent: 1, adminReportSent: 1, failed: 0, eligibleUsers: 1 });
 assert.equal(sent.length, 2);
 assert.equal(sent[0].body.to[0], user.email);
@@ -82,3 +90,4 @@ assert.match(sent[0].headers['Idempotency-Key'], /nexashare-weekly-user-1/);
 globalThis.fetch = originalFetch;
 
 console.log('Weekly report tests passed');
+

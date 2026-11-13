@@ -9,6 +9,7 @@ import { ADMIN_PROGRESS_PATH, handleAdminProgress, ADMIN_DAILY_REPORT_SWITCH_PAT
 const APP_ORIGIN = 'https://nexashare.com';
 const DAILY_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
 export const DAILY_REPORT_CRON = '0 6 * * *';
+export const WEEKLY_REPORT_CRON = '0 * * * *';
 export const CURRENT_EXTENSION_VERSION = '1.2.33';
 
 function escapeHtml(value) {
@@ -267,9 +268,11 @@ export default {
     })];
     if (!event?.cron || event.cron === DAILY_REPORT_CRON) {
       jobs.push(
-        ...dailyReportJobs(env),
-        sendSundayReports(env, CURRENT_EXTENSION_VERSION, { date: scheduledDate })
+        ...dailyReportJobs(env)
       );
+    }
+    if (!event?.cron || event.cron === WEEKLY_REPORT_CRON) {
+      jobs.push(sendSundayReports(env, CURRENT_EXTENSION_VERSION, { date: scheduledDate }));
     }
     // Same check for the other Gershon platforms' extensions (Social, Radar, Pulse, Linalysis).
     const watcher = checkWatchedExtensions(env).catch(error => {
@@ -278,3 +281,4 @@ export default {
     ctx.waitUntil(Promise.all([Promise.all(jobs), watcher]).then(([results]) => results));
   }
 };
+
