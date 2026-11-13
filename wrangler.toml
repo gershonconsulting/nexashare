@@ -15,9 +15,10 @@ database_name = "nexashare-db"
 database_id = "a282afe3-af5f-44e3-9982-c49dd5bd641d"
 
 [triggers]
-# 06:00 UTC = 08:00 CEST / 07:00 CET. Cloudflare cron schedules use UTC.
-# "*/30" only checks for a new Chrome extension release and emails report@ once per version.
-crons = ["0 6 * * *", "*/30 * * * *"]
+# Daily reports remain enabled at 06:00 UTC. The hourly trigger is gated in the
+# Worker to Sunday 08:00 America/New_York, so daylight-saving changes are handled.
+# "*/30" also checks for a new Chrome extension release and emails report@ once per version.
+crons = ["0 6 * * *", "0 * * * *", "*/30 * * * *"]
 
 [[routes]]
 pattern = "nexashare.com"
@@ -29,3 +30,4 @@ custom_domain = true
 
 [ai]
 binding = "AI"
+
