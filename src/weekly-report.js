@@ -11,8 +11,20 @@ function escapeHtml(value) {
   })[character]);
 }
 
+export function newYorkParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', hourCycle: 'h23'
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map(part => [part.type, part.value]));
+}
+
 export function isSunday(date = new Date()) {
-  return date.getUTCDay() === 0;
+  return newYorkParts(date).weekday === 'Sun';
+}
+
+export function isWeeklyReportTime(date = new Date()) {
+  const parts = newYorkParts(date);
+  return parts.weekday === 'Sun' && Number(parts.hour) >= 8 && Number(parts.hour) < 12;
 }
 
 export function weekKey(date = new Date()) {
@@ -159,10 +171,12 @@ async function collectUserWeek(db, user, date) {
 
 export async function sendSundayReports(env, currentVersion, options = {}) {
   const date = options.date instanceof Date ? options.date : new Date();
-  if (!options.force && !isSunday(date)) return { sent: 0, skipped: 'not_sunday' };
+  if (!options.force && !isWeeklyReportTime(date)) return { sent: 0, skipped: 'outside_weekly_window' };
   if (!env.RESEND_API_KEY) return { sent: 0, skipped: 'resend_not_configured' };
-  const users = (await env.DB.prepare(`SELECT id, email, name, team_id FROM users WHERE email IS NOT NULL AND trim(email) <> '' ORDER BY id LIMIT 1000`).all()).results || [];
   const key = weekKey(date);
+  const prior = await env.DB.prepare("SELECT status FROM admin_weekly_reports WHERE week_key = ? AND status = 'sent'").bind(key).first().catch(() => null);
+  if (prior) return { sent: 0, skipped: 'already_sent_this_week' };
+  const users = (await env.DB.prepare(`SELECT id, email, name, team_id FROM users WHERE email IS NOT NULL AND trim(email) <> '' ORDER BY id LIMIT 1000`).all()).results || [];
   let userReportsSent = 0;
   let failed = 0;
   const adminRows = [];
@@ -180,11 +194,29 @@ export async function sendSundayReports(env, currentVersion, options = {}) {
   const adminTo = String(env.ADMIN_REPORT_TO || ADMIN_REPORT_TO).split(',')[0].trim() || ADMIN_REPORT_TO;
   let adminReportSent = 0;
   try {
-    await sendWithResend(env, buildWeeklyAdminEmail(adminRows, currentVersion, date, adminTo), `nexashare-weekly-admin-${key}`);
+    const providerMessageId = await sendWithResend(env, buildWeeklyAdminEmail(adminRows, currentVersion, date, adminTo), `nexashare-weekly-admin-${key}`);
     adminReportSent = 1;
+    await env.DB.prepare(`INSERT INTO admin_weekly_reports (week_key, recipient, status, provider_message_id, error, sent_at)
+      VALUES (?, ?, 'sent', ?, NULL, datetime('now'))
+      ON CONFLICT(week_key) DO UPDATE SET recipient=excluded.recipient,status='sent',provider_message_id=excluded.provider_message_id,error=NULL,sent_at=excluded.sent_at`).bind(key, adminTo, providerMessageId).run();
   } catch (error) {
     failed++;
     console.error('Weekly administrator report failed', { message: error?.message });
+    const reason = String(error?.message || 'Unknown weekly report failure').slice(0, 500);
+    await env.DB.prepare(`INSERT INTO admin_weekly_reports (week_key, recipient, status, error, sent_at)
+      VALUES (?, ?, 'failed', ?, datetime('now'))
+      ON CONFLICT(week_key) DO UPDATE SET recipient=excluded.recipient,status='failed',error=excluded.error,sent_at=excluded.sent_at`).bind(key, adminTo, reason).run().catch(() => null);
+    try {
+      await sendWithResend(env, {
+        from: ADMIN_REPORT_FROM, to: adminTo,
+        subject: `CRITICAL: NexaShare weekly administrator report failed · ${key}`,
+        text: `The weekly global administrator report failed and will be retried during the Sunday recovery window.\n\nFailure: ${reason}`,
+        html: `<h1>Critical NexaShare report failure</h1><p>The weekly global administrator report failed and will be retried during the Sunday recovery window.</p><p><b>Failure:</b> ${escapeHtml(reason)}</p>`
+      }, `nexashare-weekly-critical-${key}`);
+    } catch (alertError) {
+      console.error('Critical weekly report alert failed', { message: alertError?.message });
+    }
   }
   return { userReportsSent, adminReportSent, failed, eligibleUsers: users.length };
 }
+

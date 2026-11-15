@@ -123,7 +123,7 @@ assert.match(extensionSource, /captureRunDiagnostic\('run_blocked'/);
 assert.match(extensionSource, /captureRunDiagnostic\('run_completed'/);
 assert.match(extensionSource, /'discovery_failed'/);
 assert.match(extensionSource, /SOURCE_DISCOVERY_ATTEMPTS = 3/);
-assert.match(extensionSource, /REPOST_ATTEMPTS = 4/);
+assert.match(extensionSource, /REPOST_ATTEMPTS = 2/);
 assert.match(extensionSource, /linkedin-layout:fingerprint/);
 assert.match(extensionSource, /repost:progressive-retry/);
 assert.match(extensionSource, /structural-card/);
@@ -304,8 +304,14 @@ cronWorker.scheduled({ cron: '0 6 * * *', scheduledTime: Date.parse('2026-09-14T
 assert.deepEqual(await cronPromise, [
   { sent: 0, skipped: 'resend_not_configured', version: '1.2.33' },
   { sent: 0, skipped: 'resend_not_configured' },
-  { sent: 0, skipped: 'resend_not_configured', to: ['report@gershonconsulting.com'] },
-  { sent: 0, skipped: 'not_sunday' }
+  { sent: 0, skipped: 'resend_not_configured', to: ['report@gershonconsulting.com'] }
+]);
+
+let weeklyPromise;
+cronWorker.scheduled({ cron: '0 * * * *', scheduledTime: Date.parse('2026-09-13T12:00:00Z') }, env, { waitUntil(promise) { weeklyPromise = promise; } });
+assert.deepEqual(await weeklyPromise, [
+  { sent: 0, skipped: 'resend_not_configured', version: '1.2.33' },
+  { sent: 0, skipped: 'resend_not_configured' }
 ]);
 
 // The half-hourly fire only checks for a new extension release; it never sends reports.
@@ -314,3 +320,4 @@ cronWorker.scheduled({ cron: '*/30 * * * *', scheduledTime: Date.parse('2026-09-
 assert.deepEqual(await releaseOnlyPromise, [{ sent: 0, skipped: 'resend_not_configured', version: '1.2.33' }]);
 
 console.log('Worker and extension smoke checks passed.');
+
