@@ -2,10 +2,10 @@ import { canonicalDeliveryPostUrl } from './delivery-engine.js';
 export const THOUGHTS_PILOT_EMAIL='olivier@attia.com';
 export const THOUGHTS_MIN_VERSION='1.2.33';
 export const isThoughtsPilot=user=>String(user?.email||'').trim().toLowerCase()===THOUGHTS_PILOT_EMAIL;
-export async function thoughtsMode(db,user){
-  if(!isThoughtsPilot(user))return {eligible:false,enabled:false,mode:'plain',minimum_version:THOUGHTS_MIN_VERSION};
-  const setting=await db.prepare('SELECT enabled FROM repost_thought_settings WHERE user_id = ?').bind(user.id).first();
-  return {eligible:true,enabled:setting?.enabled!==0,mode:setting?.enabled===0?'plain':'with_thoughts',minimum_version:THOUGHTS_MIN_VERSION,style:'2–7 words, contextual, source language; author name only when known'};
+// Stabilization kill switch: automatic Repost with thoughts is disabled for every account.
+// Keep plain reposting enabled. Re-enable only after tested, explicit approval.
+export async function thoughtsMode(_db,_user){
+  return {eligible:false,enabled:false,mode:'plain',minimum_version:THOUGHTS_MIN_VERSION};
 }
 function postUrl(value){const url=new URL(String(value||''));if(url.origin!=='https://www.linkedin.com'||!(/(?:urn:li:activity:\d{15,}|activity-\d{15,})/.test(url.pathname)||(/^\/(?:company\/[^/]+\/posts|in\/[^/]+\/recent-activity\/all)\/?$/.test(url.pathname)&&/^#nexashare-post=[a-zA-Z0-9_%-]{1,150}$/.test(url.hash))))throw Error('A canonical LinkedIn activity URL is required');return canonicalDeliveryPostUrl(url.href);}
 export function validateThoughts(value){
