@@ -5,6 +5,15 @@ Date: 2026-09-09
 ================================================================
 
 ================================================================
+2026-11-15 nightly  -  stale repost-thoughts test (stacked on PR #47)
+================================================================
+✅  tests/repost-thoughts.test.mjs now matches the global thoughts kill
+    switch from merged #46 (disabled for every account). Unblocks the
+    "Validate Worker and extension" check on #47. No app code changed.
+❌  The generate/arm happy path is not tested while the switch is off.
+    Restore it together with an approved re-enable.
+
+================================================================
 2026-11-07 nightly  -  repost-with-thoughts matcher fix (PR nightly/2026-11-07-nexashare-matcher)
 ================================================================
 ✅  chrome-extension/sync-core.js openThoughtsComposer: Repost
