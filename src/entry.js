@@ -15,6 +15,14 @@ export default {
       } });
     }
     if (new URL(request.url).pathname === MATRIX_STATS_PATH) return handleMatrixStats(request, env);
+    // Signed-out homepage probe (public/index.html): GET /api/user with header X-Soft-Auth: 1
+    // answers 200 {authenticated:false} instead of 401, so the browser logs no red console
+    // error. Plain /api/user (dashboard etc.) is untouched and still returns 401.
+    if (request.method === 'GET' && new URL(request.url).pathname === '/api/user' && request.headers.get('X-Soft-Auth') === '1') {
+      return Promise.resolve(worker.fetch(request, env, ctx)).then((res) => res.status === 401
+        ? new Response(JSON.stringify({ authenticated: false }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
+        : res);
+    }
     return worker.fetch(request, env, ctx);
   },
   scheduled(event, env, ctx) {

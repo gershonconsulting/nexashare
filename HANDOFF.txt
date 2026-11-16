@@ -5,6 +5,19 @@ Date: 2026-09-09
 ================================================================
 
 ================================================================
+2026-11-16 nightly  -  no 401 console error on the signed-out homepage
+================================================================
+Cause: public/index.html probed GET /api/user; signed-out = 401 = red console error.
+Fix (WEBSITE ONLY, worker + homepage; extension untouched, no Chrome Web Store release,
+no version bump - 1.2.33 is the extension version and bumping it e-mails every client):
+  src/entry.js: GET /api/user with header X-Soft-Auth:1 answers 200 {authenticated:false} when the app says
+  401. Plain /api/user is unchanged (401). public/index.html sends that header and
+  redirects to /dashboard.html only when the reply has an id (signed-in path identical).
+  tests/signedout-probe.test.mjs (new; not in deploy.yml list): soft -> 200, plain -> 401.
+✅  all 21 test scripts incl. worker-smoke pass (Node 22).
+❌  merge + deploy (Ariel/Charles), then re-check the nexashare.com console.
+
+================================================================
 2026-11-15 nightly  -  stale repost-thoughts test (stacked on PR #47)
 ================================================================
 ✅  tests/repost-thoughts.test.mjs now matches the global thoughts kill
