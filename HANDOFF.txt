@@ -258,7 +258,7 @@ PR #4  "Implement NexaShare referral attribution and qualification" (draft)
 PR #22 "Fix LinkedIn post-card readiness detection"
   State: 8 behind main, conflicts only in src/worker.js (version).
   Own tests all pass; sync-core.js syntax OK. Fix is sound and still
-  needed: main keeps the broad button[aria-percent] selectors.
+  needed: main keeps the broad button[aria-pressed] selectors.
   Recommendation: REWORK. Rebase on main, keep selector + test
   changes, bump to 1.2.29 (main already has 1.2.28), re-run tests,
   then merge. Do not commit a .zip (see gotchas).
