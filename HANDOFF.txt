@@ -5,6 +5,19 @@ Date: 2026-09-09
 ================================================================
 
 ================================================================
+2026-11-16 nightly  -  no 401 console error on the signed-out homepage
+================================================================
+Cause: public/index.html probed GET /api/user; signed-out = 401 = red console error.
+Fix (WEBSITE ONLY, worker + homepage; extension untouched, no Chrome Web Store release,
+no version bump - 1.2.33 is the extension version and bumping it e-mails every client):
+  src/entry.js: GET /api/user with header X-Soft-Auth:1 answers 200 {authenticated:false} when the app says
+  401. Plain /api/user is unchanged (401). public/index.html sends that header and
+  redirects to /dashboard.html only when the reply has an id (signed-in path identical).
+  tests/signedout-probe.test.mjs (new; not in deploy.yml list): soft -> 200, plain -> 401.
+✅  all 21 test scripts incl. worker-smoke pass (Node 22).
+❌  merge + deploy (Ariel/Charles), then re-check the nexashare.com console.
+
+================================================================
 2026-11-15 nightly  -  stale repost-thoughts test (stacked on PR #47)
 ================================================================
 ✅  tests/repost-thoughts.test.mjs now matches the global thoughts kill
@@ -211,7 +224,7 @@ Tests         : tests/content-guards.mjs - mojibake scan, duplicate-
 - Writes to this repo: `git push` is proxy-refused and the GitHub API
   403s. The working path is the GitHub web UI through Chrome. Upload
   ONE file per call (multi-file calls are refused), from a path under
-  /mnt/user-data/uploads/. Retry once on a random refusal.
+  /mnt/user-data/uploads/. Retry once on a random refresh.
 - Verify every commit by reading raw.githubusercontent.com. Commits
   have silently failed to land and looked identical to success.
 - content-guards.mjs exists for a reason - the mojibake came back once
@@ -242,7 +255,7 @@ PR #4  "Implement NexaShare referral attribution and qualification" (draft)
   (migration 0013, src/referrals.js, reward days). Its 0007 migration
   would collide with main's 0007_report_signals.sql.
 
-PR #22 "Fix LinkedIn post-card readiness detection"
+PR #22 "Fix LinkedIn post-card readiness detection" (see above)
   State: 8 behind main, conflicts only in src/worker.js (version).
   Own tests all pass; sync-core.js syntax OK. Fix is sound and still
   needed: main keeps the broad button[aria-pressed] selectors.
