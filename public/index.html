@@ -39,8 +39,10 @@
 <script>
 (async () => {
   try {
-    const response = await fetch('/api/user', { credentials: 'same-origin', cache: 'no-store' });
-    if (response.ok) location.replace('/dashboard.html');
+    // X-Soft-Auth: signed-out answers 200 {authenticated:false} (no 401 console error).
+    const response = await fetch('/api/user', { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Soft-Auth': '1' } });
+    const me = response.ok ? await response.json() : null;
+    if (me && me.id) location.replace('/dashboard.html');
   } catch (_) {
     // The public homepage remains available if the session check cannot complete.
   }
