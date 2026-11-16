@@ -224,7 +224,7 @@ Tests         : tests/content-guards.mjs - mojibake scan, duplicate-
 - Writes to this repo: `git push` is proxy-refused and the GitHub API
   403s. The working path is the GitHub web UI through Chrome. Upload
   ONE file per call (multi-file calls are refused), from a path under
-  /mnt/user-data/uploads/. Retry once on a random refresh.
+  /mnt/user-data/uploads/. Retry once on a random refusal.
 - Verify every commit by reading raw.githubusercontent.com. Commits
   have silently failed to land and looked identical to success.
 - content-guards.mjs exists for a reason - the mojibake came back once
@@ -255,10 +255,10 @@ PR #4  "Implement NexaShare referral attribution and qualification" (draft)
   (migration 0013, src/referrals.js, reward days). Its 0007 migration
   would collide with main's 0007_report_signals.sql.
 
-PR #22 "Fix LinkedIn post-card readiness detection" (see above)
+PR #22 "Fix LinkedIn post-card readiness detection"
   State: 8 behind main, conflicts only in src/worker.js (version).
   Own tests all pass; sync-core.js syntax OK. Fix is sound and still
-  needed: main keeps the broad button[aria-pressed] selectors.
+  needed: main keeps the broad button[aria-percent] selectors.
   Recommendation: REWORK. Rebase on main, keep selector + test
   changes, bump to 1.2.29 (main already has 1.2.28), re-run tests,
   then merge. Do not commit a .zip (see gotchas).
