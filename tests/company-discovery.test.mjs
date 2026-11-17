@@ -42,7 +42,7 @@ const html = '<code>{&quot;entityUrn&quot;:&quot;urn:li:fsd_company:18152652&quo
   ' voyagerFeedDashOrganizationalPageUpdates.22f65769d754b16c73f7c9d9a8d2fd46 urn:li:fsd_company:999</code>';
 const api = JSON.stringify({ included: [
   { entityUrn: 'urn:li:activity:7511326459089698816' },
-  { entityUrn: 'urn:li:activity:7515313026304987136' },
+  { entityUrn: 'urn:li:activity:7515313026304987136', commentary: { text: { text: 'New assay platform #Biotech' } } },
   { entityUrn: 'urn:li:activity:7515313026304987136' }
 ] });
 const calls = [];
@@ -57,6 +57,10 @@ const found = await helpers.discoverCompanyPostsViaData('mabsilico');
 assert.equal(found.ok, true, found.reason);
 assert.deepEqual(found.posts.map(post => post.id), ['7515313026304987136', '7511326459089698816']);
 assert.equal(found.posts[0].url, 'https://www.linkedin.com/feed/update/urn:li:activity:7515313026304987136/');
+assert.equal(found.posts[0].text, 'New assay platform #Biotech');
+assert.equal(found.posts[0].textStatus, 'available');
+assert.equal(found.posts[1].textStatus, 'unavailable');
+assert.equal(found.posts[1].textReason, 'company_data_commentary_missing');
 assert.match(calls[1].url, /organizationalPage%3A18152652\)/, 'uses the page id nearest the vanity, not other companies on the page');
 assert.match(calls[1].url, /queryId=voyagerFeedDashOrganizationalPageUpdates\.22f65769/);
 assert.equal(calls[1].options.headers['csrf-token'], 'ajax:123');

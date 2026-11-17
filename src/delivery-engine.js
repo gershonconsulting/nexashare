@@ -40,22 +40,42 @@ export function deliveryStatusFromOutcome(outcome) {
   return DELIVERY_STATUSES.FAILED;
 }
 
+export function canonicalDeliveryPostUrl(postUrl) {
+  const url = new URL(postUrl);
+  const activity = url.pathname.match(/urn:li:activity:(\d{15,})|activity-(\d{15,})/);
+  return activity ? `https://www.linkedin.com/feed/update/urn:li:activity:${activity[1] || activity[2]}/` : url.href;
+}
+
 export async function markDeliveryProcessing(db, { teamId, userId, postUrl }) {
-  return db.prepare(
+  postUrl = canonicalDeliveryPostUrl(postUrl);
+  const result = await db.prepare(
     `INSERT INTO delivery_jobs (team_id, user_id, original_post_url, status, attempt_count, started_at, updated_at)
      VALUES (?, ?, ?, 'processing', 1, datetime('now'), datetime('now'))
      ON CONFLICT(team_id, user_id, original_post_url) DO UPDATE SET
        status = 'processing', attempt_count = delivery_jobs.attempt_count + 1,
-       started_at = datetime('now'), updated_at = datetime('now'), failure_code = NULL, failure_detail = NULL`
+       started_at = datetime('now'), updated_at = datetime('now'), failure_code = NULL, failure_detail = NULL
+     WHERE delivery_jobs.status IN ('scheduled', 'failed', 'skipped')
+       AND COALESCE(delivery_jobs.failure_code, '') != 'confirmation_unknown'
+       AND COALESCE(delivery_jobs.failure_detail, '') NOT LIKE '%did not provide visible confirmation%'
+       AND COALESCE(delivery_jobs.failure_detail, '') NOT LIKE '%did not return an outcome%'`
   ).bind(teamId, userId, postUrl).run();
+  return { acquired: Number(result.meta?.changes || 0) === 1 };
 }
 
 export async function recordDeliveryOutcome(db, { teamId, userId, outcome }) {
+  outcome = { ...outcome, postUrl: canonicalDeliveryPostUrl(outcome.postUrl) };
   const status = deliveryStatusFromOutcome(outcome);
-  const failure = status === DELIVERY_STATUSES.FAILED ? classifyFailure(outcome?.detail) : null;
+  // An absent confirmation can mean the click succeeded. Never automatically
+  // re-acquire these posts on another device or after a service-worker restart.
+  const failure = status === DELIVERY_STATUSES.FAILED
+    ? (/did not provide visible confirmation|did not return an outcome|after progressive recovery/i.test(outcome?.detail || '')
+      ? { code: 'confirmation_unknown', retryable: false } : classifyFailure(outcome?.detail)) : null;
   const current = await db.prepare(
-    'SELECT id, attempt_count, max_attempts FROM delivery_jobs WHERE team_id = ? AND user_id = ? AND original_post_url = ?'
+    'SELECT id, status, attempt_count, max_attempts FROM delivery_jobs WHERE team_id = ? AND user_id = ? AND original_post_url = ?'
   ).bind(teamId, userId, outcome.postUrl).first();
+  if (['published', 'already_reposted'].includes(current?.status) && status !== DELIVERY_STATUSES.PUBLISHED) {
+    return { status: current.status, retryScheduled: false, failureCode: null };
+  }
   const attempts = Number(current?.attempt_count || 1);
   const maxAttempts = Number(current?.max_attempts || 3);
   const shouldRetry = !!failure?.retryable && attempts < maxAttempts;
@@ -80,12 +100,15 @@ export async function recordDeliveryOutcome(db, { teamId, userId, outcome }) {
 
   await db.prepare(
     `UPDATE delivery_jobs SET status = ?, failure_code = ?, failure_detail = ?, repost_url = ?,
+       post_text = CASE WHEN ? != '' THEN ? ELSE post_text END, company_name = ?,
        next_retry_at = CASE WHEN ? THEN datetime('now', '+' || ? || ' minutes') ELSE NULL END,
        completed_at = CASE WHEN ? THEN NULL ELSE datetime('now') END, updated_at = datetime('now')
-     WHERE id = ?`
+     WHERE id = ? AND (status NOT IN ('published', 'already_reposted') OR ? = 'published')`
   ).bind(
     status, failure?.code || null, String(outcome.detail || '').slice(0, 2000), outcome.repostUrl || null,
-    shouldRetry ? 1 : 0, retryMinutes, shouldRetry ? 1 : 0, current.id
+    String(outcome.postTextSnippet || '').slice(0, 2000), String(outcome.postTextSnippet || '').slice(0, 2000),
+    String(outcome.companyName || '').slice(0, 100),
+    shouldRetry ? 1 : 0, retryMinutes, shouldRetry ? 1 : 0, current.id, status
   ).run();
   return { status, retryScheduled: shouldRetry, failureCode: failure?.code || null };
 }

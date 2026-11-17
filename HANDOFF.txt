@@ -4,6 +4,102 @@ Written by: Claude (Anthropic) - token-limit handoff protocol
 Date: 2026-09-09
 ================================================================
 
+================================================================
+2026-11-16 nightly  -  no 401 console error on the signed-out homepage
+================================================================
+Cause: public/index.html probed GET /api/user; signed-out = 401 = red console error.
+Fix (WEBSITE ONLY, worker + homepage; extension untouched, no Chrome Web Store release,
+no version bump - 1.2.33 is the extension version and bumping it e-mails every client):
+  src/entry.js: GET /api/user with header X-Soft-Auth:1 answers 200 {authenticated:false} when the app says
+  401. Plain /api/user is unchanged (401). public/index.html sends that header and
+  redirects to /dashboard.html only when the reply has an id (signed-in path identical).
+  tests/signedout-probe.test.mjs (new; not in deploy.yml list): soft -> 200, plain -> 401.
+✅  all 21 test scripts incl. worker-smoke pass (Node 22).
+❌  merge + deploy (Ariel/Charles), then re-check the nexashare.com console.
+
+================================================================
+2026-11-15 nightly  -  stale repost-thoughts test (stacked on PR #47)
+================================================================
+✅  tests/repost-thoughts.test.mjs now matches the global thoughts kill
+    switch from merged #46 (disabled for every account). Unblocks the
+    "Validate Worker and extension" check on #47. No app code changed.
+❌  The generate/arm happy path is not tested while the switch is off.
+    Restore it together with an approved re-enable.
+
+================================================================
+2026-11-07 nightly  -  repost-with-thoughts matcher fix (PR nightly/2026-11-07-nexashare-matcher)
+================================================================
+✅  chrome-extension/sync-core.js openThoughtsComposer: Repost
+    controls and the "Repost with your thoughts" menu option are now
+    counted once when LinkedIn nests a role="button"/menuitem wrapper
+    around the real <button> (innermost node kept). This is the likely
+    cause of 51x "Could not identify exactly one matching post" and
+    14x "unambiguous ... option" for olivier@attia.com since 1.2.33.
+    Plain repost path (every other account) is untouched.
+✅  tests/repost-thoughts-dom.test.mjs: 5 new fixtures (wrapped Repost,
+    wrapped Repost + text match, wrapped menu option, two wrapped posts
+    with id, two posts without id stay ambiguous). Both halves of the
+    fix proven to fail without it. All 21 workflow test scripts +
+    admin-progress.test.mjs pass (Node 22).
+❌  NOT released. Version left at 1.2.33 on purpose - Ariel bumps at
+    release (1.2.34: manifest, src/worker.js + src/index.js
+    CURRENT_EXTENSION_VERSION, THOUGHTS_MIN_VERSION if wanted,
+    dashboard/setup/index links, release notice, worker-smoke). That
+    bump e-mails every client and shows the red banner - intended for a
+    real extension release only.
+❌  Not verified against live LinkedIn markup (fixture only). First
+    run after 1.2.34 on Olivier's browser should be one controlled test.
+❌  Until released: no-code workaround = dashboard -> Activity ->
+    "Automatic Repost with your thoughts" OFF for Olivier (plain
+    reposts were 82.8% on 11-02). Re-sign LinkedIn in that browser.
+
+2026-11-02 OK  POST https://nexashare.com/api/matrix-stats (src/matrix-stats.js via src/entry.js) aligned to the Client Platform Matrix contract: exact email match on users.email, ok = has account, note = "N reposts 30d" from delivery_jobs published in last 30d, else "no account". Read-only, hash-checked secret.
+
+================================================================
+2026-11-07 nightly  -  one date basis for daily e-mails (PR nightly/2026-11-07-nexashare-report-basis)
+================================================================
+OK  Admin digest ("NexaShare Extension Report") and the per-user daily
+    reports now count the SAME day: the previous America/New_York
+    calendar day (DST-safe; the 06:00 UTC cron runs after it closes).
+    Before: admin = rolling 24h before 06:00 UTC, labelled with the SEND
+    date; per-user = UTC calendar day. So 11-06 admin said "4 confirmed"
+    while Olivier's e-mail said 0 (the 4 were Amos/Dmitri/Vincent/Charles,
+    who get no per-user e-mail; plus the window shift).
+    Shared helper: reportDayWindow() / dateBasisFooter() in src/reporting.js.
+    Both e-mails end with "Counts for <YYYY-MM-DD> ET · source NexaShare
+    reposts table (...) · generated <time> UTC". Admin subject now names
+    the counted ET day ("November 5, 2026 ET"), not the send date.
+    Still rolling 24h (labelled so): new registrations, connected
+    installs, delivery-engine table. Dashboard day-by-day tables stay UTC.
+    Tests: tests/admin-report.test.mjs (ET boundaries, DST, admin sum =
+    per-user sum, footer). All 21 CI test scripts pass.
+NO  Version NOT bumped (same rule as 2026-10-23): no extension change in
+    this PR, and bumping CURRENT_EXTENSION_VERSION e-mails every client a
+    release notice and turns on the red update banner.
+!!  Failure collapse 11-05 (0% / 79 failed) = Olivier's account only, and
+    only since extension 1.2.33 (commit 5ee8998, 11-02) switched his
+    account to automatic "Repost with your thoughts". See the PR body for
+    the diagnosis and the proposed 1.2.34 matcher fix (nested Repost
+    controls counted twice). Quick restore: switch "Automatic Repost with
+    your thoughts" OFF in Activity -> plain reposts (82.8% on 11-02).
+
+================================================================
+2026-10-23 nightly  -  phone header fix (PR nightly/2026-10-23-nexashare-phone-header)
+================================================================
+OK  Homepage header (public/index.html) on phones under 480px: the
+    "Features" and "How It Works" links are hidden there, the logo and
+    "Get Started" button are a bit smaller, so the header stays on one
+    line and "Get Started" is fully visible. At 390px the page was
+    450px wide (sideways scroll); now exactly 390px. Desktop unchanged.
+    Blue NexaShare brand kept.
+NO  Version NOT bumped on purpose. The only version number NexaShare
+    shows is the Chrome extension release (1.2.28). Bumping
+    CURRENT_EXTENSION_VERSION would make the cron email every client
+    a release notice and turn on the red "update required" banner,
+    for an extension that did not change. If a bump is wanted anyway,
+    1.2.29 is already earmarked for PR #22 (per PR #23), so it would
+    be 1.2.30.
+
 0. WHO YOU ARE READING THIS
 ----------------------------------------------------------------
 You are an AI assistant taking over work on this repository for
@@ -48,6 +144,13 @@ Tests         : tests/content-guards.mjs - mojibake scan, duplicate-
 
 3. RECENTLY DONE  [DONE]
 ----------------------------------------------------------------
+- 2026-10-28 (nightly, PR open, not merged): weekly report health rule
+  in src/weekly-report.js - an account with confirmed > 0 and failed = 0
+  (100% success) is now green. Fewer than 7 run days or an older
+  extension no longer make it orange; they stay in the reason line.
+  Tests updated, NOT run (no build access). No version bump: the only
+  version in the repo is the extension manifest, and bumping it would
+  flag every user as outdated in these same reports.
 - 55 mojibake sequences repaired across public/index.html,
   dashboard.html and login.html; duplicated 'Why teams choose
   NexaShare' section removed; download link moved 1.2.11 -> 1.2.16.
@@ -97,6 +200,11 @@ Tests         : tests/content-guards.mjs - mojibake scan, duplicate-
 ----------------------------------------------------------------
 - Repost 0% - see 4(a). Root cause understood, fix written, not landed.
 - Daily report silently dead - see 4(b).
+- Daily report wording: 'ACTION NEEDED - no run recorded' is correct
+  (src/worker.js, ranYesterday false). The rate label already prints
+  'N/A - no attempts' for zero attempts (src/reporting.js rateLabel), so
+  a '0% success' line in a daily email is not produced by current main;
+  check which build is deployed before changing code.
 
 7. NEXT ACTION - START HERE
 ----------------------------------------------------------------
@@ -126,6 +234,37 @@ Tests         : tests/content-guards.mjs - mojibake scan, duplicate-
 ----------------------------------------------------------------
 Olivier Attia - oattia@gmail.com
 Report mailbox - report@gershonconsulting.com
+
+================================================================
+2026-10-22 nightly  -  open PR triage (read-only review)
+================================================================
+Main is at a0c9ef1, extension 1.2.28 (data-first discovery), release
+1.4.0 (referrals) and the delivery engine already shipped. NOTE: the
+older sections above (1.2.16 / 1.2.18 blockers) are historical.
+Nothing was merged or closed by this review.
+
+PR #2  "Add campaign delivery engine foundation" (draft)
+  State: 93 commits behind main, conflicts (add/add delivery-engine.js).
+  Recommendation: CLOSE AS SUPERSEDED. main already has migration
+  0006_delivery_engine.sql, src/delivery-engine.js and its test.
+
+PR #4  "Implement NexaShare referral attribution and qualification" (draft)
+  State: 92 commits behind main, conflicts (deploy.yml, login.html,
+  referrals.js, worker.js).
+  Recommendation: CLOSE AS SUPERSEDED. Release 1.4.0 shipped referrals
+  (migration 0013, src/referrals.js, reward days). Its 0007 migration
+  would collide with main's 0007_report_signals.sql.
+
+PR #22 "Fix LinkedIn post-card readiness detection"
+  State: 8 behind main, conflicts only in src/worker.js (version).
+  Own tests all pass; sync-core.js syntax OK. Fix is sound and still
+  needed: main keeps the broad button[aria-pressed] selectors.
+  Recommendation: REWORK. Rebase on main, keep selector + test
+  changes, bump to 1.2.29 (main already has 1.2.28), re-run tests,
+  then merge. Do not commit a .zip (see gotchas).
+
+Next action: Olivier OK to close #2 and #4, and let Ariel rebase #22
+as 1.2.29.
 
 ================================================================
 END OF HANDOFF

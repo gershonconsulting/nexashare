@@ -1,13 +1,22 @@
 import assert from 'node:assert/strict';
-import { buildWeeklyAdminEmail, buildWeeklyUserEmail, isSunday, sendSundayReports, weeklyHealth, weekKey } from '../src/weekly-report.js';
+import { buildWeeklyAdminEmail, buildWeeklyUserEmail, isSunday, isWeeklyReportTime, sendSundayReports, weeklyHealth, weekKey } from '../src/weekly-report.js';
 
 const current = '1.2.18';
 assert.equal(isSunday(new Date('2026-09-13T06:00:00Z')), true);
 assert.equal(isSunday(new Date('2026-09-14T06:00:00Z')), false);
+assert.equal(isWeeklyReportTime(new Date('2026-01-11T13:00:00Z')), true, '08:00 EST');
+assert.equal(isWeeklyReportTime(new Date('2026-07-12T12:00:00Z')), true, '08:00 EDT');
+assert.equal(isWeeklyReportTime(new Date('2026-07-12T11:00:00Z')), false);
 assert.equal(weekKey(new Date('2026-09-13T06:00:00Z')), '2026-09-06_2026-09-13');
 
 assert.equal(weeklyHealth({ extensionVersion: current, runDays: 7, confirmed: 3, failed: 0 }, current).code, 'green');
-assert.equal(weeklyHealth({ extensionVersion: current, runDays: 5, confirmed: 3, failed: 0 }, current).code, 'orange');
+// 100% success stays green even with fewer run days or an older extension (caveat is in the reason line)
+const partialWeek = weeklyHealth({ extensionVersion: current, runDays: 5, confirmed: 3, failed: 0 }, current);
+assert.equal(partialWeek.code, 'green');
+assert.equal(partialWeek.icon, '✅');
+assert.equal(weeklyHealth({ extensionVersion: '1.2.16', runDays: 7, confirmed: 3, failed: 0 }, current).code, 'green');
+// some failures alongside confirmations, or nothing confirmed, is still orange
+assert.equal(weeklyHealth({ extensionVersion: current, runDays: 7, confirmed: 2, failed: 1 }, current).code, 'orange');
 assert.equal(weeklyHealth({ extensionVersion: current, runDays: 7, confirmed: 0, failed: 0 }, current).code, 'orange');
 assert.equal(weeklyHealth({ extensionVersion: current, runDays: 2, confirmed: 0, failed: 2 }, current).code, 'red');
 assert.equal(weeklyHealth({ extensionVersion: null, runDays: 0, confirmed: 0, failed: 0 }, current).code, 'red');
@@ -18,6 +27,20 @@ const userEmail = buildWeeklyUserEmail(user, activity, current, new Date('2026-0
 assert.match(userEmail.subject, /✅ NexaShare weekly report/);
 assert.match(userEmail.text, /Extension run days: 7\/7/);
 assert.match(userEmail.html, /v1\.2\.18/);
+
+const pilotUser = { id: 99, name: 'Olivier Attia', email: 'olivier@attia.com' };
+const pilotActivity = { ...activity, aiCommentDrafts: [
+  { company_name: 'MAbSilico', original_post_url: 'https://www.linkedin.com/feed/update/urn:li:activity:123', comment_text: 'Congratulations on this achievement!', status: 'copied' },
+  { company_name: 'Another Source', original_post_url: 'https://www.linkedin.com/feed/update/urn:li:activity:456', comment_text: 'Great initiative!', status: 'generated' }
+] };
+const pilotEmail = buildWeeklyUserEmail(pilotUser, pilotActivity, current, new Date('2026-09-13T06:00:00Z'));
+assert.match(pilotEmail.subject, /Olivier Attia.*2 AI comment drafts/);
+assert.match(pilotEmail.text, /Congratulations on this achievement!/);
+assert.match(pilotEmail.text, /Generated, not copied/);
+assert.match(pilotEmail.text, /publication unverified/);
+assert.match(pilotEmail.html, /MAbSilico/);
+assert.match(pilotEmail.html, /Great initiative!/);
+assert.doesNotMatch(pilotEmail.text, /2 published comments/);
 
 const adminEmail = buildWeeklyAdminEmail([
   { ...user, ...activity },
@@ -45,15 +68,20 @@ const db = {
         throw new Error(`Unexpected all query: ${sql}`);
       },
       async first() {
+        if (sql.includes('FROM admin_weekly_reports')) return null;
         if (sql.includes('SUM(CASE')) return activity;
         if (sql.includes('COUNT(DISTINCT')) return { days: 7 };
         if (sql.includes('FROM extension_tokens')) return { extension_version: current, last_seen_at: activity.lastSeenAt };
         throw new Error(`Unexpected first query: ${sql}`);
+      },
+      async run() {
+        if (sql.includes('admin_weekly_reports')) return { success: true };
+        throw new Error(`Unexpected run query: ${sql}`);
       }
     };
   }
 };
-const sundayResult = await sendSundayReports({ DB: db, RESEND_API_KEY: 'test' }, current, { date: new Date('2026-09-13T06:00:00Z') });
+const sundayResult = await sendSundayReports({ DB: db, RESEND_API_KEY: 'test' }, current, { date: new Date('2026-09-13T12:00:00Z') });
 assert.deepEqual(sundayResult, { userReportsSent: 1, adminReportSent: 1, failed: 0, eligibleUsers: 1 });
 assert.equal(sent.length, 2);
 assert.equal(sent[0].body.to[0], user.email);
@@ -62,3 +90,4 @@ assert.match(sent[0].headers['Idempotency-Key'], /nexashare-weekly-user-1/);
 globalThis.fetch = originalFetch;
 
 console.log('Weekly report tests passed');
+

@@ -1,6 +1,8 @@
+import { performanceNarrative, ENGAGEMENT_LIMITATION } from './performance.js';
 import { collectDailySeries, dailyTableHtml, dailyTableText, rateLabel } from './reporting.js';
 const APP_ORIGIN = 'https://nexashare.com';
 const REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
+const ADMIN_REPORT_FROM = 'GC NexaShare <nexashare@gershon.ai>';   // internal admin digest: GC prefix
 const ADMIN_REPORT_TO = 'report@gershonconsulting.com';
 
 function escapeHtml(value) {
@@ -9,8 +11,20 @@ function escapeHtml(value) {
   })[character]);
 }
 
+export function newYorkParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', hourCycle: 'h23'
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map(part => [part.type, part.value]));
+}
+
 export function isSunday(date = new Date()) {
-  return date.getUTCDay() === 0;
+  return newYorkParts(date).weekday === 'Sun';
+}
+
+export function isWeeklyReportTime(date = new Date()) {
+  const parts = newYorkParts(date);
+  return parts.weekday === 'Sun' && Number(parts.hour) >= 8 && Number(parts.hour) < 12;
 }
 
 export function weekKey(date = new Date()) {
@@ -30,10 +44,13 @@ export function weeklyHealth(data, currentVersion) {
   if (!data.confirmed && data.failed) {
     return { code: 'red', icon: '❌', label: 'Red — repost attempts failed', colour: '#b42318' };
   }
-  if (data.extensionVersion !== currentVersion || data.runDays < 7 || data.failed || !data.confirmed) {
-    return { code: 'orange', icon: '⚠️', label: 'Orange — attention needed', colour: '#b54708' };
+  // 100% success (at least one confirmed, nothing failed) is green. Fewer than 7 run days or an
+  // older extension are still named in the reason line, but no longer turn a perfect week orange.
+  if (data.confirmed && !data.failed) {
+    const caveat = data.extensionVersion !== currentVersion || data.runDays < 7;
+    return { code: 'green', icon: '✅', label: caveat ? 'Green — 100% success' : 'Green — everything worked', colour: '#067647' };
   }
-  return { code: 'green', icon: '✅', label: 'Green — everything worked', colour: '#067647' };
+  return { code: 'orange', icon: '⚠️', label: 'Orange — attention needed', colour: '#b54708' };
 }
 
 function healthReason(data, currentVersion) {
@@ -53,11 +70,13 @@ function rangeLabel(date = new Date()) {
   const start = new Date(end);
   start.setUTCDate(start.getUTCDate() - 7);
   const format = value => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }).format(value);
-  return `${format(start)} – ${format(end)}`;
+  end.setUTCDate(end.getUTCDate() - 1);
+  return `${format(start)} – ${format(end)} (UTC)`;
 }
 
 export function buildWeeklyUserEmail(user, data, currentVersion, date = new Date()) {
   const health = weeklyHealth(data, currentVersion);
+  const performanceSummary = performanceNarrative(data, data.previousTotals);
   const firstName = String(user.name || '').trim().split(/\s+/)[0] || 'there';
   const reason = healthReason(data, currentVersion);
   const rows = data.outcomes?.length
@@ -67,12 +86,26 @@ export function buildWeeklyUserEmail(user, data, currentVersion, date = new Date
     ? data.outcomes.slice(0, 100).map(row => `- ${row.company_name || 'LinkedIn source'}: ${String(row.status || '').replaceAll('_', ' ')}${row.detail ? ` — ${row.detail}` : ''}${row.repost_url ? ` — ${row.repost_url}` : ''}`).join('\n')
     : '- No repost outcomes were recorded this week.';
 
+  const showAutomatic=String(user.email||'').trim().toLowerCase()==='olivier@attia.com';
+  const automatic=data.autoThoughts||[],publishedThoughts=automatic.filter(row=>row.status==='published').length;
+  const automaticText=automatic.length?'\nAutomatic Repost with your thoughts — '+publishedThoughts+' confirmed\n'+automatic.map(row=>'- '+row.source_name+' | '+row.status+' | '+row.thoughts+' | '+row.original_post_url+(row.repost_url?' | '+row.repost_url:'')).join('\n'):'\nAutomatic Repost with your thoughts: no entries this week.';
+  const automaticHtml='<h3>Automatic Repost with your thoughts — '+publishedThoughts+' confirmed</h3><p>Generated, submitted, uncertain and LinkedIn-confirmed outcomes are tracked separately. These are accompanying thoughts, not comments under the original post.</p>'+ (automatic.length?automatic.map(row=>'<div style="padding:10px 0;border-bottom:1px solid #e5e7eb"><b>'+escapeHtml(row.source_name)+'</b><div>'+escapeHtml(row.thoughts||'No text generated')+'</div><small>'+escapeHtml(row.status)+' · '+escapeHtml(row.generated_at)+'</small><div><a href="'+escapeHtml(row.original_post_url)+'">Original post</a>'+(row.repost_url?' · <a href="'+escapeHtml(row.repost_url)+'">Your repost</a>':'')+'</div></div>').join(''):'<p>No automatic thoughts generated this week.</p>');
+  const drafts = Array.isArray(data.aiCommentDrafts) ? data.aiCommentDrafts : [];
+  const generated = drafts.length;
+  const copied = drafts.filter(item => item.status === 'copied').length;
+  const commentText = [
+    'AI comment pilot — drafts only, not verified LinkedIn comments',
+    'Drafts generated: ' + generated + '; copied: ' + copied + '; verified published: not available.',
+    ...drafts.map(item => '- ' + (item.company_name || 'LinkedIn source') + ' | ' + (item.status === 'copied' ? 'Copied (publication unverified)' : 'Generated, not copied') + ' | ' + (item.generated_at || 'Date unavailable') + ' | ' + item.comment_text + ' | ' + (item.original_post_url || 'No post URL'))
+  ].join('\n');
+  const commentHtml = '<h3>AI comment pilot — ' + generated + ' drafts</h3><p>' + copied + ' copied. NexaShare cannot confirm whether comments were published on LinkedIn; no draft is counted as an automatic published comment.</p>' +
+    (drafts.length ? drafts.map(item => '<div style="border-bottom:1px solid #e5e7eb;padding:10px 0"><b>' + escapeHtml(item.company_name || 'LinkedIn source') + '</b><div>' + escapeHtml(item.comment_text) + '</div><small>' + escapeHtml(item.status === 'copied' ? 'Copied — publication unverified' : 'Generated — not copied') + '</small><div><a href="' + escapeHtml(item.original_post_url || APP_ORIGIN) + '">Original post</a></div></div>').join('') : '<p>No AI comment drafts were generated this week.</p>');
   return {
     from: REPORT_FROM,
     to: user.email,
-    subject: `${health.icon} NexaShare weekly report · ${rangeLabel(date)} · ${rateLabel(data.confirmed, data.failed)} · ${data.confirmed} confirmed, ${data.failed} failed`,
-    text: `Hi ${firstName},\n\n${health.label}\n${reason}\n\nWeek: ${rangeLabel(date)}\n- Confirmed reposts: ${data.confirmed}\n- Failed attempts: ${data.failed}\n- Success rate: ${rateLabel(data.confirmed, data.failed)}\n- Skipped / already reposted: ${data.skipped}\n- Extension run days: ${data.runDays}/7\n- Chrome extension: ${data.extensionVersion ? `v${data.extensionVersion}` : 'not detected'} (current v${currentVersion})\n\n${dailyTableText(data.series)}\nActivity\n${textDetails}\n\nDashboard: ${APP_ORIGIN}/dashboard.html#reposts`,
-    html: `<!doctype html><html><body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table width="100%"><tr><td align="center" style="padding:30px 14px"><table width="100%" style="max-width:720px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:${health.colour};color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">${health.icon} NexaShare weekly report</div><div style="margin-top:6px">${escapeHtml(rangeLabel(date))}</div></td></tr><tr><td style="padding:26px"><p>Hi ${escapeHtml(firstName)},</p><div style="padding:15px;border-left:5px solid ${health.colour};background:#f8fafc"><strong style="color:${health.colour}">${escapeHtml(health.label)}</strong><div style="margin-top:5px">${escapeHtml(reason)}</div></div><ul><li><b>${data.confirmed}</b> confirmed reposts</li><li><b>${data.failed}</b> failed attempts</li><li><b>${data.skipped}</b> skipped / already reposted</li><li>Extension ran on <b>${data.runDays}/7</b> days</li><li>Chrome extension: <b>${escapeHtml(data.extensionVersion ? `v${data.extensionVersion}` : 'not detected')}</b> (current v${escapeHtml(currentVersion)})</li></ul><p><b>${escapeHtml(rateLabel(data.confirmed, data.failed))}</b> — confirmed ÷ (confirmed + failed); skips excluded.</p>${dailyTableHtml(data.series)}<h3>Activity this week</h3><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:9px;background:#f8fafc">Source</th><th align="left" style="padding:9px;background:#f8fafc">Outcome</th><th align="left" style="padding:9px;background:#f8fafc">Details</th></tr></thead><tbody>${rows}</tbody></table><p style="text-align:center;margin-top:24px"><a href="${APP_ORIGIN}/dashboard.html#reposts" style="background:#0a66c2;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700">Open dashboard</a></p></td></tr></table></td></tr></table></body></html>`
+    subject: `${health.icon} NexaShare weekly report · ${user.name || user.email} · ${rangeLabel(date)} · ${generated} AI comment drafts · ${data.confirmed} reposts${showAutomatic?' · '+publishedThoughts+' reposts with thoughts':''}`,
+    text: `Hi ${firstName},\n\n${health.label}\n${reason}\n\n${performanceSummary}\n${ENGAGEMENT_LIMITATION}\n\nWeek: ${rangeLabel(date)}\n- Confirmed reposts: ${data.confirmed}\n- Failed attempts: ${data.failed}\n- Success rate: ${rateLabel(data.confirmed, data.failed)}\n- Skipped / already reposted: ${data.skipped}\n- Extension run days: ${data.runDays}/7\n- Chrome extension: ${data.extensionVersion ? `v${data.extensionVersion}` : 'not detected'} (current v${currentVersion})\n\n${dailyTableText(data.series)}\nActivity (latest 100 outcomes; totals are complete)\n${textDetails}\n\n${commentText}\n${showAutomatic?automaticText:''}\n\nDashboard: ${APP_ORIGIN}/dashboard.html#reposts`,
+    html: `<!doctype html><html lang="en" dir="ltr"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>NexaShare report</title></head><body lang="en" dir="ltr" style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#172033"><table role="presentation" lang="en" dir="ltr" width="100%"><tr><td align="center" style="padding:30px 14px"><table role="presentation" width="100%" style="max-width:720px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:${health.colour};color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">${health.icon} NexaShare weekly report</div><div style="margin-top:6px">${escapeHtml(rangeLabel(date))}</div></td></tr><tr><td style="padding:26px"><p>Hi ${escapeHtml(firstName)},</p><div style="padding:15px;border-left:5px solid ${health.colour};background:#f8fafc"><strong style="color:${health.colour}">${escapeHtml(health.label)}</strong><div style="margin-top:5px">${escapeHtml(reason)}</div></div><ul><li><b>${data.confirmed}</b> confirmed reposts</li><li><b>${data.failed}</b> failed attempts</li><li><b>${data.skipped}</b> skipped / already reposted</li><li>Extension ran on <b>${data.runDays}/7</b> days</li><li>Chrome extension: <b>${escapeHtml(data.extensionVersion ? `v${data.extensionVersion}` : 'not detected')}</b> (current v${escapeHtml(currentVersion)})</li></ul><p><b>${escapeHtml(rateLabel(data.confirmed, data.failed))}</b> — confirmed ÷ (confirmed + failed); skips excluded.</p><h2 style="font-size:18px">Your publishing progress</h2><p>${escapeHtml(performanceSummary)}</p><p style="font-size:13px;color:#475467">${escapeHtml(ENGAGEMENT_LIMITATION)}</p>${dailyTableHtml(data.series)}<h3>Activity this week</h3><p>Latest 100 outcomes shown; totals include every outcome.</p><table width="100%" cellspacing="0" style="border-collapse:collapse"><thead><tr><th align="left" style="padding:9px;background:#f8fafc">Source</th><th align="left" style="padding:9px;background:#f8fafc">Outcome</th><th align="left" style="padding:9px;background:#f8fafc">Details</th></tr></thead><tbody>${rows}</tbody></table>${commentHtml}${showAutomatic?automaticHtml:''}<p style="text-align:center;margin-top:24px"><a href="${APP_ORIGIN}/dashboard.html#reposts" style="background:#FE1B04;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700">Open dashboard</a></p></td></tr></table></td></tr></table></body></html>`
   };
 }
 
@@ -88,15 +121,19 @@ export function buildWeeklyAdminEmail(users, currentVersion, date = new Date(), 
     failed: sum.failed + user.failed,
     skipped: sum.skipped + user.skipped
   }), { confirmed: 0, failed: 0, skipped: 0 });
-  const rows = enriched.map(user => `<tr><td style="padding:9px;border-bottom:1px solid #e5e7eb"><b>${user.health.icon} ${escapeHtml(user.name || user.email)}</b><div style="font-size:12px;color:#667085">${escapeHtml(user.email)}</div></td><td style="padding:9px;border-bottom:1px solid #e5e7eb">${escapeHtml(user.extensionVersion ? `v${user.extensionVersion}` : 'Not detected')}<div style="font-size:12px;color:#667085">Last seen: ${escapeHtml(user.lastSeenAt || 'never')}</div></td><td style="padding:9px;border-bottom:1px solid #e5e7eb">${user.confirmed} confirmed<br>${user.failed} failed<br><b>${escapeHtml(rateLabel(user.confirmed, user.failed))}</b><br>${user.skipped} skipped<br>${user.runDays}/7 run days</td><td style="padding:9px;border-bottom:1px solid #e5e7eb;color:${user.health.colour}"><b>${escapeHtml(user.health.label)}</b><div style="font-size:12px;color:#667085">${escapeHtml(user.reason)}</div></td></tr>`).join('');
-  const textUsers = enriched.map(user => `${user.health.icon} ${user.name || user.email} <${user.email}> — extension ${user.extensionVersion ? `v${user.extensionVersion}` : 'not detected'}; ${user.confirmed} confirmed, ${user.failed} failed, ${rateLabel(user.confirmed, user.failed)}, ${user.skipped} skipped, ${user.runDays}/7 run days. ${user.reason}`).join('\n');
+  const pilotSummary = enriched.filter(user => String(user.email || '').toLowerCase() === 'olivier@attia.com').map(user => {
+    const drafts = user.aiCommentDrafts || [];
+    return 'Olivier AI comment pilot: ' + drafts.length + ' generated, ' + drafts.filter(x => x.status === 'copied').length + ' copied, published unverified.';
+  }).join(' ');
+  const rows = enriched.map(user => `<tr><td style="padding:9px;border-bottom:1px solid #e5e7eb"><b>${user.health.icon} ${escapeHtml(user.name || user.email)}</b><div style="font-size:12px;color:#667085">${escapeHtml(user.email)}</div></td><td style="padding:9px;border-bottom:1px solid #e5e7eb">${escapeHtml(user.extensionVersion ? `v${user.extensionVersion}` : 'Not detected')}<div style="font-size:12px;color:#667085">Last seen: ${escapeHtml(user.lastSeenAt || 'never')}</div></td><td style="padding:9px;border-bottom:1px solid #e5e7eb">${user.confirmed} confirmed<br>${user.failed} failed<br><b>${escapeHtml(rateLabel(user.confirmed, user.failed))}</b><br>${user.skipped} skipped<br>${user.runDays}/7 run days</td><td style="padding:9px;border-bottom:1px solid #e5e7eb;color:${user.health.colour}"><b>${escapeHtml(user.health.label)}</b><div style="font-size:12px;color:#667085">${escapeHtml(user.reason)}</div><p>${escapeHtml(performanceNarrative(user, user.previousTotals))}</p></td></tr>`).join('');
+  const textUsers = enriched.map(user => `${user.health.icon} ${user.name || user.email} <${user.email}> — extension ${user.extensionVersion ? `v${user.extensionVersion}` : 'not detected'}; ${user.confirmed} confirmed, ${user.failed} failed, ${rateLabel(user.confirmed, user.failed)}, ${user.skipped} skipped, ${user.runDays}/7 run days. ${user.reason} ${performanceNarrative(user, user.previousTotals)}`).join('\n');
 
   return {
-    from: REPORT_FROM,
+    from: ADMIN_REPORT_FROM,
     to,
     subject: `NexaShare weekly administrator report · ${rangeLabel(date)} · ${rateLabel(totals.confirmed, totals.failed)} · ${healthCounts.green} green, ${healthCounts.orange} orange, ${healthCounts.red} red`,
-    text: `NexaShare weekly administrator report\nWeek: ${rangeLabel(date)}\n\nUsers: ${enriched.length}\nStatus: ${healthCounts.green} green, ${healthCounts.orange} orange, ${healthCounts.red} red\nConfirmed: ${totals.confirmed}\nFailed: ${totals.failed}\nSkipped: ${totals.skipped}\nSuccess rate: ${rateLabel(totals.confirmed, totals.failed)}\nCurrent extension: v${currentVersion}\n\nEvery user\n${textUsers}\n\nDashboard: ${APP_ORIGIN}/dashboard.html#reposts`,
-    html: `<!doctype html><html><body style="margin:0;background:#eef3f8;font-family:Arial,sans-serif;color:#172033"><table width="100%"><tr><td align="center" style="padding:30px 14px"><table width="100%" style="max-width:900px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:#0a66c2;color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare weekly administrator report</div><div style="margin-top:6px">${escapeHtml(rangeLabel(date))}</div></td></tr><tr><td style="padding:26px"><p><b>${enriched.length}</b> users · <span style="color:#067647"><b>✅ ${healthCounts.green} green</b></span> · <span style="color:#b54708"><b>⚠️ ${healthCounts.orange} orange</b></span> · <span style="color:#b42318"><b>❌ ${healthCounts.red} red</b></span></p><p><b>${totals.confirmed}</b> confirmed · <b>${totals.failed}</b> failed · <b>${totals.skipped}</b> skipped · <b>${escapeHtml(rateLabel(totals.confirmed, totals.failed))}</b> · current extension <b>v${escapeHtml(currentVersion)}</b></p><table width="100%" cellspacing="0" style="border-collapse:collapse;font-size:14px"><thead><tr><th align="left" style="padding:9px;background:#f8fafc">User</th><th align="left" style="padding:9px;background:#f8fafc">Extension</th><th align="left" style="padding:9px;background:#f8fafc">Week</th><th align="left" style="padding:9px;background:#f8fafc">Health</th></tr></thead><tbody>${rows}</tbody></table><p style="font-size:12px;color:#667085;margin-top:18px">Green: extension ran all 7 days, at least one repost was confirmed, no failures, and the current version is installed. Orange: partial activity or attention needed. Red: extension missing/not running, or all repost attempts failed.</p></td></tr></table></td></tr></table></body></html>`
+    text: `NexaShare weekly administrator report\nWeek: ${rangeLabel(date)}\n\nUsers: ${enriched.length}\nStatus: ${healthCounts.green} green, ${healthCounts.orange} orange, ${healthCounts.red} red\nConfirmed: ${totals.confirmed}\nFailed: ${totals.failed}\nSkipped: ${totals.skipped}\nSuccess rate: ${rateLabel(totals.confirmed, totals.failed)}\nCurrent extension: v${currentVersion}\n${pilotSummary}\n${ENGAGEMENT_LIMITATION}\n\nEvery user\n${textUsers}\n\nDashboard: ${APP_ORIGIN}/dashboard.html#reposts`,
+    html: `<!doctype html><html lang="en" dir="ltr"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>NexaShare report</title></head><body lang="en" dir="ltr" style="margin:0;background:#eef3f8;font-family:Arial,sans-serif;color:#172033"><table role="presentation" lang="en" dir="ltr" width="100%"><tr><td align="center" style="padding:30px 14px"><table width="100%" style="max-width:900px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="background:#FE1B04;color:#fff;padding:26px"><div style="font-size:25px;font-weight:800">NexaShare weekly administrator report</div><div style="margin-top:6px">${escapeHtml(rangeLabel(date))}</div></td></tr><tr><td style="padding:26px"><p><b>${enriched.length}</b> users · <span style="color:#067647"><b>✅ ${healthCounts.green} green</b></span> · <span style="color:#b54708"><b>⚠️ ${healthCounts.orange} orange</b></span> · <span style="color:#b42318"><b>❌ ${healthCounts.red} red</b></span></p><p>${escapeHtml(pilotSummary)}</p><p>${escapeHtml(ENGAGEMENT_LIMITATION)}</p><p><b>${totals.confirmed}</b> confirmed · <b>${totals.failed}</b> failed · <b>${totals.skipped}</b> skipped · <b>${escapeHtml(rateLabel(totals.confirmed, totals.failed))}</b> · current extension <b>v${escapeHtml(currentVersion)}</b></p><table width="100%" cellspacing="0" style="border-collapse:collapse;font-size:14px"><thead><tr><th align="left" style="padding:9px;background:#f8fafc">User</th><th align="left" style="padding:9px;background:#f8fafc">Extension</th><th align="left" style="padding:9px;background:#f8fafc">Week</th><th align="left" style="padding:9px;background:#f8fafc">Health</th></tr></thead><tbody>${rows}</tbody></table><p style="font-size:12px;color:#667085;margin-top:18px">Green: at least one repost was confirmed and none failed (100% success); any run-day or extension-version caveat is shown in the reason line. Orange: some failures alongside confirmations, or nothing confirmed. Red: extension missing/not running, or all repost attempts failed.</p></td></tr></table></td></tr></table></body></html>`
   };
 }
 
@@ -117,16 +154,29 @@ async function collectUserWeek(db, user, date) {
   const totals = await db.prepare(`SELECT SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed, SUM(CASE WHEN status IN ('skipped', 'already_reposted') THEN 1 ELSE 0 END) AS skipped FROM reposts WHERE user_id = ? AND datetime(COALESCE(attempted_at, created_at)) >= datetime(?) AND datetime(COALESCE(attempted_at, created_at)) < datetime(?)`).bind(user.id, ...key).first();
   const counts = { confirmed: Number(totals?.confirmed || 0), failed: Number(totals?.failed || 0), skipped: Number(totals?.skipped || 0) };
   const run = await db.prepare(`SELECT COUNT(DISTINCT date(created_at)) AS days FROM extension_runs WHERE user_id = ? AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`).bind(user.id, ...key).first().catch(() => null);
+  let aiCommentDrafts = [];
+  let autoThoughts = [];
+  if (String(user.email || '').trim().toLowerCase() === 'olivier@attia.com') {
+    autoThoughts = (await db.prepare('SELECT source_name,thoughts,status,generated_at,original_post_url,repost_url FROM repost_thoughts WHERE user_id=? AND datetime(generated_at)>=datetime(?) AND datetime(generated_at)<datetime(?) ORDER BY generated_at DESC,id DESC').bind(user.id,...key).all()).results||[];
+    aiCommentDrafts = (await db.prepare(`SELECT d.comment_text, d.status, d.generated_at, r.company_name, r.original_post_url
+      FROM ai_comment_drafts d JOIN reposts r ON r.id = d.repost_id
+      WHERE d.user_id = ? AND datetime(d.generated_at) >= datetime(?) AND datetime(d.generated_at) < datetime(?)
+      ORDER BY datetime(d.generated_at) DESC, d.id DESC`).bind(user.id, ...key).all()).results || [];
+  }
   const token = await db.prepare(`SELECT extension_version, last_seen_at FROM extension_tokens WHERE user_id = ? AND revoked_at IS NULL ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1`).bind(user.id).first().catch(() => null);
-  return { ...counts, series: await collectDailySeries(db, user.id, 7, date, false), outcomes, runDays: Number(run?.days || 0), extensionVersion: token?.extension_version || null, lastSeenAt: token?.last_seen_at || null };
+  const previousDate = new Date(date); previousDate.setUTCDate(previousDate.getUTCDate() - 7);
+  const previousTotals = (await collectDailySeries(db, user.id, 7, previousDate, false)).totals;
+  return { ...counts, previousTotals, series: await collectDailySeries(db, user.id, 7, date, false), outcomes, aiCommentDrafts, autoThoughts, runDays: Number(run?.days || 0), extensionVersion: token?.extension_version || null, lastSeenAt: token?.last_seen_at || null };
 }
 
 export async function sendSundayReports(env, currentVersion, options = {}) {
   const date = options.date instanceof Date ? options.date : new Date();
-  if (!options.force && !isSunday(date)) return { sent: 0, skipped: 'not_sunday' };
+  if (!options.force && !isWeeklyReportTime(date)) return { sent: 0, skipped: 'outside_weekly_window' };
   if (!env.RESEND_API_KEY) return { sent: 0, skipped: 'resend_not_configured' };
-  const users = (await env.DB.prepare(`SELECT id, email, name, team_id FROM users WHERE email IS NOT NULL AND trim(email) <> '' ORDER BY id LIMIT 1000`).all()).results || [];
   const key = weekKey(date);
+  const prior = await env.DB.prepare("SELECT status FROM admin_weekly_reports WHERE week_key = ? AND status = 'sent'").bind(key).first().catch(() => null);
+  if (prior) return { sent: 0, skipped: 'already_sent_this_week' };
+  const users = (await env.DB.prepare(`SELECT id, email, name, team_id FROM users WHERE email IS NOT NULL AND trim(email) <> '' ORDER BY id LIMIT 1000`).all()).results || [];
   let userReportsSent = 0;
   let failed = 0;
   const adminRows = [];
@@ -144,11 +194,29 @@ export async function sendSundayReports(env, currentVersion, options = {}) {
   const adminTo = String(env.ADMIN_REPORT_TO || ADMIN_REPORT_TO).split(',')[0].trim() || ADMIN_REPORT_TO;
   let adminReportSent = 0;
   try {
-    await sendWithResend(env, buildWeeklyAdminEmail(adminRows, currentVersion, date, adminTo), `nexashare-weekly-admin-${key}`);
+    const providerMessageId = await sendWithResend(env, buildWeeklyAdminEmail(adminRows, currentVersion, date, adminTo), `nexashare-weekly-admin-${key}`);
     adminReportSent = 1;
+    await env.DB.prepare(`INSERT INTO admin_weekly_reports (week_key, recipient, status, provider_message_id, error, sent_at)
+      VALUES (?, ?, 'sent', ?, NULL, datetime('now'))
+      ON CONFLICT(week_key) DO UPDATE SET recipient=excluded.recipient,status='sent',provider_message_id=excluded.provider_message_id,error=NULL,sent_at=excluded.sent_at`).bind(key, adminTo, providerMessageId).run();
   } catch (error) {
     failed++;
     console.error('Weekly administrator report failed', { message: error?.message });
+    const reason = String(error?.message || 'Unknown weekly report failure').slice(0, 500);
+    await env.DB.prepare(`INSERT INTO admin_weekly_reports (week_key, recipient, status, error, sent_at)
+      VALUES (?, ?, 'failed', ?, datetime('now'))
+      ON CONFLICT(week_key) DO UPDATE SET recipient=excluded.recipient,status='failed',error=excluded.error,sent_at=excluded.sent_at`).bind(key, adminTo, reason).run().catch(() => null);
+    try {
+      await sendWithResend(env, {
+        from: ADMIN_REPORT_FROM, to: adminTo,
+        subject: `CRITICAL: NexaShare weekly administrator report failed · ${key}`,
+        text: `The weekly global administrator report failed and will be retried during the Sunday recovery window.\n\nFailure: ${reason}`,
+        html: `<h1>Critical NexaShare report failure</h1><p>The weekly global administrator report failed and will be retried during the Sunday recovery window.</p><p><b>Failure:</b> ${escapeHtml(reason)}</p>`
+      }, `nexashare-weekly-critical-${key}`);
+    } catch (alertError) {
+      console.error('Critical weekly report alert failed', { message: alertError?.message });
+    }
   }
   return { userReportsSent, adminReportSent, failed, eligibleUsers: users.length };
 }
+
