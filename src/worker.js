@@ -10,7 +10,7 @@ const APP_ORIGIN = 'https://nexashare.com';
 const DAILY_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
 export const DAILY_REPORT_CRON = '0 6 * * *';
 export const WEEKLY_REPORT_CRON = '0 * * * *';
-export const CURRENT_EXTENSION_VERSION = '1.2.33';
+export const CURRENT_EXTENSION_VERSION = '1.2.34';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({
@@ -292,4 +292,3 @@ export default {
     ctx.waitUntil(Promise.all([Promise.all(jobs), watcher]).then(([results]) => results));
   }
 };
-
