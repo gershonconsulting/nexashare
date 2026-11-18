@@ -27,6 +27,24 @@ function escapeHtml(value) {
   })[character]);
 }
 
+// Readable labels for the extension's discovery_reason codes; the raw code stays
+// visible next to the label so reports remain searchable.
+export const DISCOVERY_REASON_LABELS = Object.freeze({
+  source_unavailable: 'Source page unavailable on LinkedIn (removed or renamed)',
+  linkedin_layout_unrecognized: 'Post-card layout not recognized',
+  linkedin_login_required: 'LinkedIn sign-in required',
+  linkedin_checkpoint: 'LinkedIn security checkpoint',
+  linkedin_rate_limited: 'LinkedIn rate limit',
+  linkedin_admin_redirect: 'Redirected to the company admin view',
+  linkedin_empty_feed: 'Source page shows no posts',
+  linkedin_tab_closed: 'LinkedIn tab closed during the run'
+});
+
+export function discoveryReasonLabel(reason) {
+  const code = String(reason || '').trim();
+  return DISCOVERY_REASON_LABELS[code] ? `${DISCOVERY_REASON_LABELS[code]} · ${code}` : code;
+}
+
 function humanStatus(status) {
   return String(status || 'unknown').replaceAll('_', ' ');
 }
@@ -310,7 +328,7 @@ export function buildAdminReportEmail(data, options = {}) {
     source: row.company_name || 'Unknown',
     version: row.extension_version || 'unknown (old client)',
     route: row.discovery_route || 'unknown',
-    reason: row.discovery_reason || row.detail || 'unclassified',
+    reason: discoveryReasonLabel(row.discovery_reason) || row.detail || 'unclassified',
     sourceType: row.source_type || 'unknown'
   }));
   const diagnosticsHtml = listTable('Failed repost diagnostics (latest attempts)', diagnosticRows, [

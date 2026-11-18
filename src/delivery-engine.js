@@ -19,6 +19,7 @@ const TRANSIENT_FAILURE_PATTERNS = [
 
 export function classifyFailure(detail = '') {
   const text = String(detail || '').slice(0, 2000);
+  if (/company\/unavailable|source page as unavailable/i.test(text)) return { code: 'source_unavailable', retryable: false };
   if (/sign.?in|not.logged.in|session/i.test(text)) return { code: 'linkedin_session_required', retryable: false };
   if (/no new eligible posts/i.test(text)) return { code: 'no_eligible_post', retryable: false };
   if (/paused/i.test(text)) return { code: 'source_paused', retryable: false };

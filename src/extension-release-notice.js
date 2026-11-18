@@ -12,6 +12,11 @@ export const RELEASE_NOTICE_FROM = 'GC NexaShare <nexashare@gershon.ai>';
 
 // Plain-language notes per version. Optional: versions without notes still announce.
 export const RELEASE_NOTES = {
+  '1.2.34': [
+    'German LinkedIn: the direct repost choice "Sofort teilen" (also "Jetzt teilen", "Direkt teilen") is now recognised; "Mit Kommentar teilen" is never chosen.',
+    'A source whose LinkedIn page redirects to linkedin.com/company/unavailable/ is now reported as an unavailable source instead of "post-card layout was not recognized".',
+    'Repost with your thoughts finds the Repost control and menu option when LinkedIn nests them inside an extra button wrapper.'
+  ],
   '1.2.33': [
     'Olivier-only automatic Repost with your thoughts: short contextual text, account toggle and exact-text publishing history.',
     'Uncertain submissions are held rather than retried; other accounts retain plain reposting.'
