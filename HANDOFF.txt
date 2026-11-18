@@ -5,6 +5,31 @@ Date: 2026-09-09
 ================================================================
 
 ================================================================
+2026-11-18 nightly  -  German "Sofort teilen" + unavailable source (extension 1.2.34, PR HELD)
+================================================================
+Cause 1: Markus Bernasconi (Amphasys, user 10) uses LinkedIn in German; his repost menu is
+  "Mit Kommentar teilen | Sofort teilen". isInstantRepost (sync-core.js, both repost paths)
+  only accepted "(jetzt|sofort|direkt) reposten" -> 0 confirmed / 34 failed ever.
+Fix 1: also accept "(jetzt|sofort|direkt) teilen"; "Mit Kommentar teilen" stays excluded
+  (isCommentShare). EN/FR/DE-reposten/ES/IT locale cases still pass.
+Cause 2: Tunahan Cakir (user 9) - only source "phitechbio" redirects to
+  linkedin.com/company/unavailable/ (90 failures since 11-10), reported as "layout not recognized".
+Fix 2: new reason source_unavailable (inspectLinkedInPage + data discovery), terminal, no
+  3x reload, no batch auto-retry; readable detail; classifyFailure -> source_unavailable;
+  admin report diagnostics show readable labels for discovery_reason codes.
+Tests: tests/linkedin-postcard.test.mjs (Markus's German menu, thoughts-only menu,
+  /company/unavailable/). Both halves fail without the fix. All deploy.yml checks pass (Node 22).
+Note: pushed via GitHub API (git push 403), which cannot write CR bytes, so sync-core.js,
+  src/index.js, dashboard.html, extension-setup.html, worker-smoke.mjs are now LF-only
+  (review with "hide whitespace"; no content change beyond the listed edits).
+Version 1.2.34: manifest, src/worker.js + src/index.js CURRENT_EXTENSION_VERSION, dashboard/
+  setup/index links, release notes (incl. the 11-07 nested-wrapper fix), worker-smoke.
+❌  awaiting Olivier's OK to release (emails every client). Do NOT merge before that: merge =
+    deploy = release notice + red update banner for every client.
+❌  Tunahan: phitechbio must be replaced/removed in his sources (data change, not done).
+❌  Not verified on live German LinkedIn markup (fixture only).
+
+================================================================
 2026-11-16 nightly  -  no 401 console error on the signed-out homepage
 ================================================================
 Cause: public/index.html probed GET /api/user; signed-out = 401 = red console error.
