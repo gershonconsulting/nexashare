@@ -220,6 +220,9 @@ for (const [control, direct, quote] of [
   ['Repost', 'Repost instantly', 'Repost with your thoughts'],
   ['Republier', 'Republier instantanément', 'Republier avec un commentaire'],
   ['Reposten', 'Jetzt reposten', 'Mit Kommentar reposten'],
+  ['Reposten', 'Sofort teilen', 'Mit Kommentar teilen'],
+  ['Reposten', 'Jetzt teilen', 'Mit Kommentar teilen'],
+  ['Reposten', 'Direkt teilen', 'Mit Kommentar teilen'],
   ['Volver a publicar', 'Volver a publicar', 'Volver a publicar con tus ideas'],
   ['Ripubblica', 'Ripubblica', 'Ripubblica con un commento']
 ]) {
@@ -239,6 +242,67 @@ for (const [control, direct, quote] of [
     assert.equal(page.document.byId('instant1').clicked, 1);
     assert.ok(!page.document.byId('share1').clicked);
   }
+}
+// ---- Markus (Amphasys, German LinkedIn, 0 confirmed / 34 failed through 1.2.33) ----
+// His repost menu reads "Mit Kommentar teilen | Sofort teilen" (thoughts option FIRST).
+// The direct matcher only knew "(jetzt|sofort|direkt) reposten", so no choice was found.
+// "Sofort teilen" must be clicked; "Mit Kommentar teilen" and the plain "Teilen" never.
+{
+  const markusMenu = '<div id="menu1" hidden><div role="button" id="thoughts1">Mit Kommentar teilen</div><div role="button" id="instant1">Sofort teilen</div></div>';
+  for (const inPlace of [false, true]) {
+    const html = (await fixture('linkedin-feed-inplace-card.html'))
+      .replace('id="repost1">Repost', 'id="repost1">Reposten')
+      .replace(/<div id="menu1" hidden>[^]*?<\/div><\/div>/, markusMenu);
+    const page = loadPage(html);
+    assert.ok(page.document.byId('thoughts1'), 'fixture carries the German thoughts option');
+    const target = page.extractCompanyPageFromDOM().posts.find(post => /assay platform/.test(post.matchText));
+    const button = page.document.byId('repost1');
+    button.onClick = () => page.document.byId('menu1').removeAttribute('hidden');
+    page.document.byId('instant1').onClick = () => button.setAttribute('aria-pressed', 'true');
+    const result = inPlace ? await page.clickAndConfirmRepostInPlace(target.matchText) : await page.clickAndConfirmRepost();
+    assert.equal(result.confirmed, true, `German "Sofort teilen", inPlace=${inPlace}: ${result.detail}`);
+    assert.equal(page.document.byId('instant1').clicked, 1, '"Sofort teilen" is the direct repost choice');
+    assert.ok(!page.document.byId('thoughts1').clicked, '"Mit Kommentar teilen" is never clicked');
+    assert.ok(!page.document.byId('share1').clicked, 'the plain "Teilen" button is never clicked');
+  }
+  // A menu offering only "Mit Kommentar teilen" must not be treated as a direct repost.
+  for (const inPlace of [false, true]) {
+    const html = (await fixture('linkedin-feed-inplace-card.html'))
+      .replace('id="repost1">Repost', 'id="repost1">Reposten')
+      .replace(/<div id="menu1" hidden>[^]*?<\/div><\/div>/, '<div id="menu1" hidden><div role="button" id="thoughts1">Mit Kommentar teilen</div></div>');
+    const page = loadPage(html);
+    const target = page.extractCompanyPageFromDOM().posts.find(post => /assay platform/.test(post.matchText));
+    page.document.byId('repost1').onClick = () => page.document.byId('menu1').removeAttribute('hidden');
+    const result = inPlace ? await page.clickAndConfirmRepostInPlace(target.matchText) : await page.clickAndConfirmRepost();
+    assert.equal(result.confirmed, false);
+    assert.match(result.detail, /could not identify/);
+    assert.ok(!page.document.byId('thoughts1').clicked, '"Mit Kommentar teilen" alone is never clicked');
+  }
+}
+
+// ---- Tunahan (source "phitechbio"): LinkedIn redirects the company page to
+// /company/unavailable/. That is a dead source, not an unrecognised layout. ----
+{
+  const html = '<html><body><nav id="global-nav"><a href="/in/me/">Me</a></nav><main><h1>This page doesn\'t exist</h1></main></body></html>';
+  for (const path of ['/company/unavailable/', '/company/unavailable']) {
+    const page = loadPage(html, path);
+    for (const finalAttempt of [false, true]) {
+      const state = page.inspectLinkedInPage(finalAttempt);
+      assert.equal(state.ready, false);
+      assert.equal(state.terminal, true, 'an unavailable page stops polling at once');
+      assert.equal(state.reason, 'source_unavailable');
+    }
+  }
+  // A real company whose vanity merely contains "unavailable" is not affected.
+  assert.notEqual(loadPage(html, '/company/unavailable-tech/posts/').inspectLinkedInPage(true).reason, 'source_unavailable');
+  const detail = new Function(`${extractFunction('discoveryFailureDetail')}\nreturn discoveryFailureDetail;`)()('source_unavailable');
+  assert.match(detail, /unavailable/);
+  assert.doesNotMatch(detail, /layout was not recognized/);
+  assert.ok(source.includes("lastResult.reason === 'source_unavailable'"), 'a dead source is not re-loaded three times');
+  const { classifyFailure } = await import('../src/delivery-engine.js');
+  assert.deepEqual(classifyFailure(detail), { code: 'source_unavailable', retryable: false });
+  const { discoveryReasonLabel } = await import('../src/admin-report.js');
+  assert.match(discoveryReasonLabel('source_unavailable'), /^Source page unavailable on LinkedIn/);
 }
 console.log('linkedin post-card and five-locale fixture checks passed');
 export { Element, loadPage, extractFunction };

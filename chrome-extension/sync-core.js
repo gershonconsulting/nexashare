@@ -210,11 +210,15 @@ async function runFullSyncUnlocked({ trigger = 'manual' } = {}) {
       const outcomeFor = (post, status, detail, repostUrl) => ({ ...makeOutcome(company, post, status, detail, repostUrl), diagnostic });
       const sourceOutcomeFor = (status, detail) => ({ ...makeCompanyOutcome(company, status, detail), diagnostic });
       if (scraped.notReady) {
-        discoveryFailures += 1;
-        discoveryFailureReason = scraped.reason || 'linkedin_layout_unrecognized';
+        // A removed/renamed page (source_unavailable) will not recover on retry.
+        const reason = scraped.reason || 'linkedin_layout_unrecognized';
+        if (reason !== 'source_unavailable') {
+          discoveryFailures += 1;
+          discoveryFailureReason = reason;
+        }
         await log('warn', 'linkedin-layout:fingerprint', {
           company: company.name,
-          reason: discoveryFailureReason,
+          reason,
           fingerprint: scraped.layoutFingerprint || 'unknown',
           detectors: scraped.detectors || []
         });
@@ -372,6 +376,7 @@ function discoveryFailureDetail(reason) {
     linkedin_admin_redirect: 'LinkedIn redirected the company feed to its admin dashboard. NexaShare will retry using member view.',
     linkedin_empty_feed: 'LinkedIn loaded the source page but did not expose any posts.',
     linkedin_tab_closed: 'The LinkedIn tab closed before NexaShare finished. NexaShare scheduled a controlled retry.',
+    source_unavailable: 'LinkedIn reports this source page as unavailable (it redirects to linkedin.com/company/unavailable/). The page may have been removed or renamed; update or remove this source in NexaShare.',
     linkedin_layout_unrecognized: 'LinkedIn loaded, but its post-card layout was not recognized. NexaShare skipped this source, continued with the others, and scheduled a controlled retry.'
   };
   return details[reason] || details.linkedin_layout_unrecognized;
@@ -400,7 +405,7 @@ async function scrapeCompanyPosts(source) {
   let lastResult = null;
   for (let attempt = 1; attempt <= SOURCE_DISCOVERY_ATTEMPTS; attempt++) {
     lastResult = await scrapeCompanyPostsOnce(source, attempt);
-    if (!lastResult.notReady) return lastResult;
+    if (!lastResult.notReady || lastResult.reason === 'source_unavailable') return lastResult;
     await log('warn', 'company:load-retry', {
       company: source.name,
       attempt,
@@ -445,6 +450,9 @@ async function scrapeCompanyPostsOnce(source, recoveryAttempt = 1) {
         }
         discoveryFallbackReason = String(viaData?.reason || 'no_result').slice(0, 150);
         await log('warn', 'company:data-discovery-fallback', { company: source.name || source.vanity, reason: discoveryFallbackReason });
+        if (discoveryFallbackReason === 'source_unavailable') {
+          return { companyName: '', posts: [], notReady: true, discoveryRoute: 'none', discoveryFallbackReason, recoveryAttempt, reason: 'source_unavailable', layoutFingerprint: 'unavailable', detectors: viaData.detectors || ['data-graphql'] };
+        }
       } catch (error) {
         if (/No tab with id/i.test(String(error))) return { companyName: '', posts: [], notReady: true, reason: 'linkedin_tab_closed' };
         discoveryFallbackReason = 'exception';
@@ -572,6 +580,7 @@ function inspectLinkedInPage(finalAttempt = false) {
   if (/\/login|\/uas\/login/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_login_required', layoutFingerprint };
   if (/\/checkpoint|\/challenge/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_checkpoint', layoutFingerprint };
   if (/\/admin\/dashboard/.test(path)) return { ready: false, terminal: true, reason: 'linkedin_admin_redirect', layoutFingerprint };
+  if (/^\/company\/unavailable(?:\/|$)/.test(path)) return { ready: false, terminal: true, reason: 'source_unavailable', layoutFingerprint };
   if (/too many requests|temporarily restricted|try again later|réessayez plus tard|versuche es später erneut/.test(pageText)) {
     return { ready: false, terminal: true, reason: 'linkedin_rate_limited', layoutFingerprint };
   }
@@ -639,6 +648,7 @@ async function discoverCompanyPostsViaData(vanity) {
     const pageRes = await fetch('/company/' + encodeURIComponent(vanity) + '/posts/?feedView=all&viewAsMember=true', { credentials: 'include' });
     if (!pageRes.ok) { result.reason = 'page_http_' + pageRes.status; return result; }
     if (/\/(login|uas\/login|checkpoint|authwall)/.test(new URL(pageRes.url).pathname)) { result.reason = 'signed_out'; return result; }
+    if (/^\/company\/unavailable(?:\/|$)/.test(new URL(pageRes.url).pathname)) { result.reason = 'source_unavailable'; return result; }
     const html = (await pageRes.text()).replace(/&quot;/g, '"').replace(/&#61;/g, '=');
     const queryId = (html.match(/voyagerFeedDashOrganizationalPageUpdates\.[0-9a-f]{20,}/) || [])[0];
     if (!queryId) { result.reason = 'no_query_id'; return result; }
@@ -934,6 +944,7 @@ async function clickAndConfirmRepost() {
     || /^republier (?:instantanément|maintenant)\b/.test(value)
     || /^republier\b[^]*instantan/.test(value)
     || /^(?:jetzt|sofort|direkt) reposten\b/.test(value)
+    || /^(?:jetzt|sofort|direkt) teilen\b/.test(value)
     || /^reposten\b/.test(value)
     || /^(?:volver a publicar|compartir de nuevo)(?: ahora| al instante)?$/.test(value)
     || /^(?:ripubblica|ricondividi)(?: ora| subito)?$/.test(value);
@@ -1001,12 +1012,13 @@ async function clickAndConfirmRepostInPlace(matchText) {
     .filter(Boolean)
     .concat(describe(item));
   const labelled = (item, predicate) => labelsOf(item).some(predicate);
-  const isCommentShare = value => /with (?:your|my) thoughts|with thoughts|quote|ajouter (?:vos|mes) réflexions|avec (?:vos|mes) réflexions|avec un commentaire|gedanken hinzufügen|mit kommentar/.test(value);
+  const isCommentShare = value => /with (?:your|my) thoughts|with thoughts|quote|ajouter (?:vos|mes) réflexions|avec (?:vos|mes) réflexions|avec un commentaire|gedanken hinzufügen|mit (?:ihren|deinen|eigenen) gedanken|mit kommentar/.test(value);
   const isInstantRepost = value => /^(?:repost|reshare) instantly\b/.test(value)
     || /^(?:repost|reshare)\b[^]*\binstantly\b/.test(value)
     || /^republier (?:instantanément|maintenant)\b/.test(value)
     || /^republier\b[^]*instantan/.test(value)
     || /^(?:jetzt|sofort|direkt) reposten\b/.test(value)
+    || /^(?:jetzt|sofort|direkt) teilen\b/.test(value)
     || /^reposten\b/.test(value)
     || /^(?:volver a publicar|compartir de nuevo)(?: ahora| al instante)?$/.test(value)
     || /^(?:ripubblica|ricondividi)(?: ora| subito)?$/.test(value);
