@@ -1,11 +1,13 @@
 # NexaShare - STATUS
 
-Last updated: 2026-11-18 (nightly)
+Last updated: 2026-11-18 (release on Olivier's OK)
 
 ## Current state
-- Production extension: 1.2.33. Worker + site deploy from `main` via `.github/workflows/deploy.yml`
+- Production extension: 1.2.34 (live since 2026-11-18 12:46 UTC, release extension-v1.2.34). Worker + site deploy from `main` via `.github/workflows/deploy.yml`
   (push to main = D1 migrations + Worker deploy + extension GitHub release + release-notice e-mail).
-- Branch `nightly/2026-11-18-nexashare-de-repost` prepares extension 1.2.34 (PR HELD).
+- ✅ PR #50 (1.2.34) merged on Olivier's OK ("All 10"); deploy ran, nexashare.com/api/health = 1.2.34.
+- ✅ PR #33 (comment knowledge base + YES/NO/EDIT approval e-mails) merged with main; migration
+  0023 is additive (CREATE TABLE/INDEX IF NOT EXISTS only). No extension change, stays 1.2.34.
 
 ## Done
 - ✅ German direct repost "Sofort / Jetzt / Direkt teilen" recognised; "Mit Kommentar teilen" never chosen
@@ -17,8 +19,8 @@ Last updated: 2026-11-18 (nightly)
 - Note: 5 files were normalized CRLF->LF by the API push (whitespace-only).
 
 ## Open
-- ❌ awaiting Olivier's OK to release (emails every client) - merge only after OK.
 - ❌ Tunahan's phitechbio source needs replacing/removing (data change, not done).
+- ❌ #33: end-to-end approval e-mail + YES/NO/EDIT flow not yet tested on production.
 - ❌ German fix verified on fixtures only; watch Markus's first runs on 1.2.34.
 
 ## Deploy route

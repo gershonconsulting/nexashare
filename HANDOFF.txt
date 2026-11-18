@@ -5,6 +5,18 @@ Date: 2026-09-09
 ================================================================
 
 ================================================================
+2026-11-18 release  -  PR #50 + PR #33 merged on Olivier's OK ("All 10")
+================================================================
+✅  #50 squash-merged -> deploy -> extension 1.2.34 live (health 12:46 UTC, GitHub release
+    extension-v1.2.34). Release notice to clients goes out via the normal release-notice flow.
+✅  #33 marked ready, merged with main (no conflicts; extension unchanged, stays 1.2.34).
+    All deploy.yml checks pass locally (Node 22) + tests/comment-knowledge.test.js (2/2).
+    Migration 0023_comment_knowledge.sql: CREATE TABLE/INDEX IF NOT EXISTS only (additive).
+❌  #33 end-to-end flow (draft -> approval e-mail -> YES/NO/EDIT page) not tested on production.
+❌  Tunahan: phitechbio source still needs a correct URL (data change, not done).
+❌  German fix: watch Markus's first runs on 1.2.34.
+
+================================================================
 2026-11-18 nightly  -  German "Sofort teilen" + unavailable source (extension 1.2.34, PR HELD)
 ================================================================
 Cause 1: Markus Bernasconi (Amphasys, user 10) uses LinkedIn in German; his repost menu is
@@ -24,8 +36,7 @@ Note: pushed via GitHub API (git push 403), which cannot write CR bytes, so sync
   (review with "hide whitespace"; no content change beyond the listed edits).
 Version 1.2.34: manifest, src/worker.js + src/index.js CURRENT_EXTENSION_VERSION, dashboard/
   setup/index links, release notes (incl. the 11-07 nested-wrapper fix), worker-smoke.
-❌  awaiting Olivier's OK to release (emails every client). Do NOT merge before that: merge =
-    deploy = release notice + red update banner for every client.
+✅  Released 2026-11-18 on Olivier's OK (see entry above).
 ❌  Tunahan: phitechbio must be replaced/removed in his sources (data change, not done).
 ❌  Not verified on live German LinkedIn markup (fixture only).
 
