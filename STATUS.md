@@ -1,6 +1,6 @@
 # NexaShare - STATUS
 
-Last updated: 2026-11-18 (release on Olivier's OK)
+Last updated: 2026-11-20 (nightly: client report gate PR, HOLD)
 
 ## Current state
 - Production extension: 1.2.34 (live since 2026-11-18 12:46 UTC, release extension-v1.2.34). Worker + site deploy from `main` via `.github/workflows/deploy.yml`
@@ -19,6 +19,8 @@ Last updated: 2026-11-18 (release on Olivier's OK)
 - Note: 5 files were normalized CRLF->LF by the API push (whitespace-only).
 
 ## Open
+- ❌ HOLD PR (2026-11-20): client report sanity gate — no 0% / ACTION NEEDED e-mail to clients when every cause is
+  operator-side; internal alert to report@ instead. Needs Olivier's OK (changes what clients receive).
 - ❌ Tunahan's phitechbio source needs replacing/removing (data change, not done).
 - ❌ #33: end-to-end approval e-mail + YES/NO/EDIT flow not yet tested on production.
 - ❌ German fix verified on fixtures only; watch Markus's first runs on 1.2.34.
