@@ -5,6 +5,21 @@ Date: 2026-09-09
 ================================================================
 
 ================================================================
+2026-11-20 nightly  -  client report sanity gate (PR HELD, Worker only, extension stays 1.2.34)
+================================================================
+2026-11-20 nightly/2026-11-20-nexashare-client-report-gate: 0-confirmed days caused only by
+  operator-side problems (no run, LinkedIn sign-in, source unavailable, layout/repost control,
+  LinkedIn rate limit/timeout) no longer e-mail the client; one internal alert to ADMIN_REPORT_TO
+  (report@gershonconsulting.com, from GC NexaShare <nexashare@gershon.ai>) lists client, reason, fix.
+  daily_reports row status 'held_operator'. Unknown failure detail -> normal client report.
+  src/client-report-gate.js, tests/client-report-gate.test.mjs (21/21), all deploy.yml checks pass.
+❌  Ariel: add "node tests/client-report-gate.test.mjs" + "node --check src/client-report-gate.js"
+    to deploy.yml validate (GitHub connector cannot write workflow files).
+❌  Admin digest "User reports sent today" also counts held rows (daily_reports, any status).
+NO  Version NOT bumped (same rule as 2026-10-23): Worker-only change; bumping
+    CURRENT_EXTENSION_VERSION e-mails every client and shows the red "outdated" banner.
+
+================================================================
 2026-11-18 release  -  PR #50 + PR #33 merged on Olivier's OK ("All 10")
 ================================================================
 ✅  #50 squash-merged -> deploy -> extension 1.2.34 live (health 12:46 UTC, GitHub release
