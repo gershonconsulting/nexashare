@@ -163,7 +163,7 @@ assert.deepEqual(sent.to, ['report@gershonconsulting.com']);
 assert.equal(sentPayload.url, 'https://api.resend.com/emails');
 assert.deepEqual(sentPayload.body.to, ['report@gershonconsulting.com']);
 assert.equal(sentPayload.body.from, 'GC NexaShare <nexashare@gershon.ai>');
-assert.match(sentPayload.body.subject, /^NexaShare Extension Report — /);
+assert.match(sentPayload.body.subject, /^NexaShare - all user report - /);
 assert.ok(sentPayload.body.html.length > 500);
 assert.ok(runStatements.some(sql => sql.includes('INSERT INTO admin_daily_reports')), 'the send must be recorded');
 
