@@ -5,6 +5,8 @@ import { sendAdminDailyReport } from './admin-report.js';
 import { sendSundayReports } from './weekly-report.js';
 import { checkWatchedExtensions, sendExtensionReleaseNotice } from './extension-release-notice.js';
 import { ADMIN_PROGRESS_PATH, handleAdminProgress, ADMIN_DAILY_REPORT_SWITCH_PATH, handleAdminDailyReportSwitch } from './admin-progress.js';
+import { ADMIN_REPORT_FROM, reportRecipients } from './admin-report.js';
+import { evaluateClientReport, buildHeldReportsAlert, HELD_REPORT_STATUS } from './client-report-gate.js';
 
 const APP_ORIGIN = 'https://nexashare.com';
 const DAILY_REPORT_FROM = 'NexaShare <nexashare@gershon.ai>';
@@ -166,7 +168,7 @@ async function sendWithResend(env, message) {
   return payload.id;
 }
 
-async function sendDailyUserReports(env) {
+export async function sendDailyUserReports(env) {
   if (!env.RESEND_API_KEY) {
     console.log('Daily user reports skipped: RESEND_API_KEY is not configured.');
     return { sent: 0, skipped: 'resend_not_configured' };
@@ -188,6 +190,7 @@ async function sendDailyUserReports(env) {
 
   let sent = 0;
   let failed = 0;
+  const held = [];
 
   // Same America/New_York day as the admin digest (src/admin-report.js), so the
   // numbers in the two e-mails agree.
@@ -232,6 +235,23 @@ async function sendDailyUserReports(env) {
       now
     };
 
+    // Sanity gate: a 0-confirmed day caused entirely by operator-side problems
+    // (no run, LinkedIn sign-in, unavailable source, extension/LinkedIn layout)
+    // is not e-mailed to the client. Gershon gets one internal alert instead.
+    const gate = evaluateClientReport(outcomes, signals.todaySummary, signals);
+    if (gate.hold) {
+      held.push({ user, causes: gate.causes, today: signals.todaySummary });
+      try {
+        await env.DB.prepare(
+          `INSERT INTO daily_reports (user_id, report_date, status, outcome_count, provider_message_id, sent_at)
+           VALUES (?, date('now'), ?, ?, NULL, datetime('now'))`
+        ).bind(user.id, HELD_REPORT_STATUS, outcomes.length).run();
+      } catch (error) {
+        console.error('Held daily report audit write failed', { userId: user.id, message: error?.message });
+      }
+      continue;
+    }
+
     try {
       const messageId = await sendWithResend(env, buildDailyReport(user, outcomes, previous, signals));
       await env.DB.prepare(
@@ -249,7 +269,36 @@ async function sendDailyUserReports(env) {
     }
   }
 
-  return { sent, failed, eligible: (users.results || []).length };
+  let heldAlert = null;
+  if (held.length) {
+    const recipients = reportRecipients(env);
+    const alert = buildHeldReportsAlert(held, { reportDate: basis.day, from: ADMIN_REPORT_FROM, to: recipients });
+    try {
+      heldAlert = await sendInternalAlert(env, alert, `nexashare-held-${basis.day}`);
+    } catch (error) {
+      heldAlert = null;
+      console.error('Held client report alert failed', { message: error?.message });
+    }
+  }
+
+  return { sent, failed, held: held.length, heldAlert, eligible: (users.results || []).length };
+}
+
+async function sendInternalAlert(env, message, idempotencyKey) {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey
+    },
+    body: JSON.stringify({ from: message.from, to: message.to, subject: message.subject, text: message.text, html: message.html })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.id) {
+    throw new Error(String(payload.message || `Resend returned HTTP ${response.status}`).slice(0, 500));
+  }
+  return payload.id;
 }
 
 export function dailyReportJobs(env, sendUsers = sendDailyUserReports, sendAdmin = sendAdminDailyReport) {
