@@ -102,7 +102,7 @@ assert.equal(degraded.delivery.pendingRetries, 0);
 // --- rendering --------------------------------------------------------------
 const email = buildAdminReportEmail(data, { date: new Date('2026-09-03T06:00:00Z') });
 // Sent 06:00 UTC on Sept 3 = the ET day Sept 2, the same basis as the per-user reports.
-assert.equal(email.subject, 'NexaShare Extension Report — September 2, 2026 ET · 80% success · 12 confirmed, 3 failed');
+assert.equal(email.subject, 'NexaShare - all user report - 2026-09-02');
 assert.match(email.text, /Counts for 2026-09-02 ET · source NexaShare reposts table/);
 assert.match(email.html, /Counts for 2026-09-02 ET · source NexaShare reposts table/);
 assert.equal(email.to, ADMIN_REPORT_TO);
