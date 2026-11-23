@@ -112,7 +112,7 @@ assert.match(email.html, /Repost button not found/);
 assert.match(email.html, /Needs attention/);
 assert.match(email.html, /2 delivery jobs are queued for retry/);
 assert.match(email.html, /Dormant Tester/);
-assert.match(email.text, /NexaShare Extension Report — September 2, 2026 ET/);
+assert.match(email.text, /NexaShare - all user report - 2026-09-02/);
 assert.match(email.text, /- Confirmed reposts: 12/);
 assert.match(email.text, /- Success rate: 80%/);
 assert.ok(!email.html.includes('undefined'), 'rendered report must not leak undefined');
