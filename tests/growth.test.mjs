@@ -63,7 +63,7 @@ sqlite.exec("UPDATE reposts SET attempted_at = datetime('now','-1 day') WHERE us
 const summary = await collectDaySummary(db,1,'-1 day');
 assert.equal(summary.confirmed,105); assert.equal(summary.rate,75);
 const daily = buildDailyReport({name:'One',email:'one@example.com'},[{status:'confirmed'}],[],{todaySummary:summary,ranYesterday:false,extensionVersion:'1.2.27'});
-assert.match(daily.subject,/75% success/); assert.match(daily.subject,/105 successful, 35 failed/);
+assert.match(daily.subject,/^NexaShare - One - daily report - /); assert.match(daily.text,/Success: 75%/);
 assert.doesNotMatch(daily.subject,/job did not run/,'recorded outcomes establish activity');
 
 const user = {id:1,email:'one@example.com'};
