@@ -254,7 +254,7 @@ assert.match(adminEmail.html, /Counts for 2026-11-05 ET · source /);
 
 const userEmail = buildDailyReport({ name: 'Olivier Attia', email: 'olivier@example.com' }, [], [],
   { todaySummary: user1, previousSummary: await collectDaySummary(etDb, 1, previousBasis), basis, now: etNow, ranYesterday: true, extensionVersion: '1.2.33' });
-assert.match(userEmail.subject, /NexaShare daily report · 2026-11-05 ET · 33\.3% success · 1 successful, 2 failed/);
+assert.equal(userEmail.subject, 'NexaShare - Olivier Attia - daily report - 2026-11-05');
 assert.match(userEmail.text, /Counts for 2026-11-05 ET · source /);
 assert.match(userEmail.html, /Counts for 2026-11-05 ET · source /);
 assert.doesNotMatch(userEmail.subject + userEmail.text, /\bUTC\)|· UTC ·| UTC ·/, 'no UTC day label left in the user e-mail');
