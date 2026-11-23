@@ -42,7 +42,7 @@ assert.equal(summarize(undefined).processed, 0);
   });
   assert.match(msg.html, /THE DAILY JOB DID NOT RUN/);
   assert.match(msg.text, /ALARM: THE DAILY JOB DID NOT RUN/);
-  assert.match(msg.subject, /^NexaShare - Test User - daily report - /, 'subject identifies the user, report type, and date');
+  assert.match(msg.subject, /^NexaShare - Olivier Attia - daily report - /, 'subject identifies the user, report type, and date');
   assert.match(msg.html, /#b42318/, 'missed-run header renders red');
   assert.doesNotMatch(msg.html, /still monitoring your configured sources/,
     'must not reassure the reader when nothing actually ran');
@@ -92,6 +92,7 @@ assert.equal(summarize(undefined).processed, 0);
   assert.match(msg.html, /Yesterday vs the day before/);
   assert.match(msg.html, /Confirmed reposts/);
   assert.match(msg.html, /Confirmation rate/);
+  assert.match(msg.html, /#b54708/, '75% success uses orange');
   assert.match(msg.html, /\+1/, 'shows the movement, not just the level');
   assert.match(msg.text, /Confirmed reposts: 2 \(was 1\)/);
 }
