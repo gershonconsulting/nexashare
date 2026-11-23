@@ -248,11 +248,11 @@ const olivier = admin.userComparisons.find(row => row.id === 1);
 assert.deepEqual([olivier.confirmed, olivier.failed, olivier.previous_confirmed], [1, 2, 1], 'admin per-user row matches the user e-mail');
 
 const adminEmail = buildAdminReportEmail(admin);
-assert.match(adminEmail.subject, /^NexaShare Extension Report — November 5, 2026 ET · 50% success · 2 confirmed, 2 failed$/);
+assert.equal(adminEmail.subject, 'NexaShare - all user report - 2026-11-05');
 assert.match(adminEmail.text, /Counts for 2026-11-05 ET · source /);
 assert.match(adminEmail.html, /Counts for 2026-11-05 ET · source /);
 
-const userEmail = buildDailyReport({ name: 'Olivier', email: 'olivier@example.com' }, [], [],
+const userEmail = buildDailyReport({ name: 'Olivier Attia', email: 'olivier@example.com' }, [], [],
   { todaySummary: user1, previousSummary: await collectDaySummary(etDb, 1, previousBasis), basis, now: etNow, ranYesterday: true, extensionVersion: '1.2.33' });
 assert.match(userEmail.subject, /NexaShare daily report · 2026-11-05 ET · 33\.3% success · 1 successful, 2 failed/);
 assert.match(userEmail.text, /Counts for 2026-11-05 ET · source /);
