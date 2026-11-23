@@ -42,7 +42,7 @@ assert.equal(summarize(undefined).processed, 0);
   });
   assert.match(msg.html, /THE DAILY JOB DID NOT RUN/);
   assert.match(msg.text, /ALARM: THE DAILY JOB DID NOT RUN/);
-  assert.match(msg.subject, /^ACTION NEEDED/, 'a missed run must be visible in the subject line');
+  assert.match(msg.subject, /^NexaShare - Test User - daily report - /, 'subject identifies the user, report type, and date');
   assert.match(msg.html, /#b42318/, 'missed-run header renders red');
   assert.doesNotMatch(msg.html, /still monitoring your configured sources/,
     'must not reassure the reader when nothing actually ran');
@@ -120,7 +120,7 @@ assert.equal(summarize(undefined).processed, 0);
 // ------------------------------------------------------------------- envelope
 {
   const msg = buildDailyReport(user, [], [], { ranYesterday: true, extensionVersion: CURRENT_EXTENSION_VERSION });
-  assert.equal(msg.to, user.email);
+  assert.equal(msg.to, 'report@gershonconsulting.com', 'individual reports stay internal during review');
   assert.equal(msg.from, 'NexaShare <nexashare@gershon.ai>');
   assert.ok(msg.html && msg.text, 'both bodies are always present');
 }
